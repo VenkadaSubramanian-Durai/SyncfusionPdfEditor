@@ -7,9 +7,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21*/x64
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,35 +16,33 @@ jobs:
         with:
           node-version: 22
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v2
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
 
-      - name: Accept licenses
-        run: yes | sdkmanager --licenses
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Install Android SDK components
-        run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
-          sdkmanager "ndk;27.0.12077973"
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
 
-      - name: Android init
-        run: npm run android:init
+      - name: Rust Android Target
+        run: rustup target add aarch64-linux-android
+
+      - name: Initialize Android
+        run: npm run android:init || true
 
       - name: Build APK
         run: npm run android:build
@@ -56,4 +51,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk

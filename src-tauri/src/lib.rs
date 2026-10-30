@@ -49,7 +49,7 @@ fn take_startup_file(state: tauri::State<'_, StartupFile>) -> Result<Option<Open
     let path = state.0.lock().map_err(|e| e.to_string())?.take();
     path.map(|p| read_pdf(&p)).transpose()
 }
-
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let startup = std::env::args_os()
         .skip(1)
