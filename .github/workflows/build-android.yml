@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      NDK_VERSION: 27.0.12077973
+      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21*/x64
 
     steps:
       - name: Checkout
@@ -21,6 +21,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -29,23 +31,22 @@ jobs:
           java-version: 21
 
       - name: Install Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v2
 
-      - name: Accept Android Licenses
+      - name: Accept licenses
         run: yes | sdkmanager --licenses
 
-      - name: Install Android Components
+      - name: Install Android SDK components
         run: |
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "ndk;${NDK_VERSION}"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+          sdkmanager "ndk;27.0.12077973"
 
-      - name: Install Dependencies
-        run: npm install
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Initialize Android
+      - name: Android init
         run: npm run android:init
 
       - name: Build APK
@@ -55,5 +56,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: |
-            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
