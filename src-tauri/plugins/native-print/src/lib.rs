@@ -17,8 +17,8 @@
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{
-    ipc::{InvokeBody, Request},
     plugin::{Builder, TauriPlugin},
     AppHandle, Manager, Runtime,
 };
@@ -61,22 +61,18 @@ fn features() -> Features {
     Features { print: SUPPORTED, save_file: SAVE_FILE }
 }
 
-/// Body: the file bytes (raw). Header `x-file-name`: URI-encoded file name.
+/// `name`: file name. `data`: the file as base64.
 /// iOS: shows the "Save to Files" sheet. Returns true when saved, false when cancelled.
+///
+/// The bytes travel as base64 in JSON (not as a raw body): Android's IPC has no raw
+/// request bodies, and JSON is the path every Tauri command uses on every platform.
 #[tauri::command]
-async fn save_file<R: Runtime>(app: AppHandle<R>, request: Request<'_>) -> Result<bool, String> {
-    let bytes = match request.body() {
-        InvokeBody::Raw(bytes) => bytes.clone(),
-        _ => return Err("Expected the file as raw bytes.".into()),
-    };
-    let name = request
-        .headers()
-        .get("x-file-name")
-        .and_then(|v| v.to_str().ok())
-        .map(percent_decode)
-        .map(|n| clean_name(&n))
-        .unwrap_or_else(|| "file".into());
-    let path = write_temp(&app, "export", &name, &bytes)?;
+async fn save_file<R: Runtime>(app: AppHandle<R>, name: String, data: String) -> Result<bool, String> {
+    let bytes = decode(&data)?;
+    if bytes.is_empty() {
+        return Err("There is nothing to save (the file is empty).".into());
+    }
+    let path = write_temp(&app, "export", &clean_name(&name), &bytes)?;
     export_file(app, path).await
 }
 
@@ -94,28 +90,24 @@ async fn export_file<R: Runtime>(_app: AppHandle<R>, _path: PathBuf) -> Result<b
     Err("Use the dialog plugin's Save As on this platform.".into())
 }
 
-/// Body: the PDF bytes (raw). Header `x-file-name`: URI-encoded file name (job title).
+/// `name`: file name (job title). `data`: the PDF as base64.
 /// Returns true when the job was sent to the printer (or the print screen was shown,
 /// on Android, where the system print screen does not report back).
 #[tauri::command]
-async fn print_pdf<R: Runtime>(app: AppHandle<R>, request: Request<'_>) -> Result<bool, String> {
-    let bytes = match request.body() {
-        InvokeBody::Raw(bytes) => bytes.clone(),
-        _ => return Err("Expected the PDF as raw bytes.".into()),
-    };
+async fn print_pdf<R: Runtime>(app: AppHandle<R>, name: String, data: String) -> Result<bool, String> {
+    let bytes = decode(&data)?;
     if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
         return Err("The data is not a PDF document.".into());
     }
-    let name = request
-        .headers()
-        .get("x-file-name")
-        .and_then(|v| v.to_str().ok())
-        .map(percent_decode)
-        .map(|n| safe_file_name(&n))
-        .unwrap_or_else(|| "document.pdf".into());
-
+    let name = safe_file_name(&name);
     let path = write_temp(&app, "print", &name, &bytes)?;
     print_file(app, path, name).await
+}
+
+/// Accepts plain base64 or a `data:...;base64,` URL.
+fn decode(data: &str) -> Result<Vec<u8>, String> {
+    let b64 = data.split_once("base64,").map(|(_, b)| b).unwrap_or(data);
+    STANDARD.decode(b64.trim()).map_err(|e| format!("The file data is not valid base64: {e}"))
 }
 
 /// Writes the file into the app's private cache folder (`print` or `export`).
@@ -177,25 +169,6 @@ fn clean_name(name: &str) -> String {
     if cleaned.is_empty() { "document".to_string() } else { cleaned }
 }
 
-/// Decodes `encodeURIComponent` output (header values must be ASCII).
-fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Some(b) = s.get(i + 1..i + 3).and_then(|h| u8::from_str_radix(h, 16).ok()) {
-                out.push(b);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
 /// Initializes the plugin. Register it with `.plugin(tauri_plugin_native_print::init())`.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("native-print")
@@ -218,9 +191,9 @@ mod tests {
         assert_eq!(safe_file_name("Report Q3.PDF"), "Report Q3.PDF");
         assert_eq!(safe_file_name(""), "document.pdf");
         assert_eq!(safe_file_name("a:b"), "a_b.pdf");
-        assert_eq!(percent_decode("R%C3%A9sum%C3%A9%20v2.pdf"), "Résumé v2.pdf");
-        assert_eq!(percent_decode("100%"), "100%");
-        assert_eq!(percent_decode("a%2"), "a%2");
+        assert_eq!(decode("data:application/json;base64,e30=").unwrap(), b"{}");
+        assert_eq!(decode("JVBERi0=").unwrap(), b"%PDF-");
+        assert!(decode("not base64!").is_err());
         assert_eq!(clean_name("notes/sample.json"), "sample.json");
         assert_eq!(clean_name("sample.xfdf"), "sample.xfdf");
     }

@@ -41,8 +41,12 @@ class NativePrintPlugin: Plugin {
     let args = try invoke.parseArgs(ExportArgs.self)
     let url = URL(fileURLWithPath: args.path)
     DispatchQueue.main.async {
-      guard let presenter = self.manager.viewController else {
+      guard let presenter = self.topViewController() else {
         invoke.reject("No window to show the Save sheet.")
+        return
+      }
+      guard FileManager.default.fileExists(atPath: url.path) else {
+        invoke.reject("The file to save was not found.")
         return
       }
       let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
@@ -52,6 +56,15 @@ class NativePrintPlugin: Plugin {
       picker.modalPresentationStyle = .formSheet
       presenter.present(picker, animated: true)
     }
+  }
+
+  /// The view controller on top (a sheet that is already open can't present another one).
+  private func topViewController() -> UIViewController? {
+    var top = self.manager.viewController
+    while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+      top = presented
+    }
+    return top
   }
 
   @objc public func printPdf(_ invoke: Invoke) throws {
@@ -85,7 +98,7 @@ class NativePrintPlugin: Plugin {
       }
 
       // iPad shows the sheet as a popover, which needs an anchor.
-      if UIDevice.current.userInterfaceIdiom == .pad, let view = self.manager.viewController?.view {
+      if UIDevice.current.userInterfaceIdiom == .pad, let view = self.topViewController()?.view {
         let anchor = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
         controller.present(from: anchor, in: view, animated: true, completionHandler: done)
       } else {

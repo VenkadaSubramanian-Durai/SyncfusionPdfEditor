@@ -44,9 +44,8 @@ export async function saveFile(
 ): Promise<boolean> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(await data.arrayBuffer());
   if ((await nativeFeatures).saveFile) {
-    return invoke<boolean>('plugin:native-print|save_file', bytes, {
-      headers: { 'x-file-name': encodeURIComponent(fileName) },
-    });
+    console.info(`[native] save_file ${fileName} (${bytes.length} bytes)`);
+    return invoke<boolean>('plugin:native-print|save_file', { name: fileName, data: toBase64(bytes) });
   }
   const path = await save({ defaultPath: fileName, filters: [filter] });
   if (!path) return false;
@@ -71,6 +70,8 @@ interface NativeFeatures {
   saveFile: boolean;
 }
 let nativePrint = false;
+/** What the native-print plugin handles on this platform (for diagnostics). */
+export const nativeFeaturesReady = () => nativeFeatures;
 const nativeFeatures: Promise<NativeFeatures> = inTauri
   ? invoke<NativeFeatures>('plugin:native-print|features').catch((error) => {
       console.error('[native] Could not check native printing', error);
@@ -90,7 +91,15 @@ export function usesNativePrint(): boolean {
  */
 export async function printPdf(blob: Blob, fileName: string): Promise<boolean> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  return invoke<boolean>('plugin:native-print|print_pdf', bytes, {
-    headers: { 'x-file-name': encodeURIComponent(fileName || 'document.pdf') },
+  return invoke<boolean>('plugin:native-print|print_pdf', {
+    name: fileName || 'document.pdf',
+    data: toBase64(bytes),
   });
+}
+
+/** Bytes travel to the plugin as base64 in JSON: Android's IPC has no raw request bodies. */
+function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
 }

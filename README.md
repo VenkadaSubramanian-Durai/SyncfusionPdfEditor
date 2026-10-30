@@ -331,6 +331,7 @@ Simulators have no real printers. On iOS use the **Printer Simulator** (Xcode �
 | Trial banner | Add `VITE_SYNCFUSION_LICENSE` to `.env`, then rebuild. |
 | Android: "NDK not found" or "ANDROID_HOME not set" | Install the NDK in Android Studio's SDK Manager, and set `ANDROID_HOME` and `NDK_HOME` as in step 6. |
 | Android: Save As shows but the file doesn't appear | Check the folder you picked in the Files app. Android save locations use content URIs; test on a real phone. |
+| iOS: **Export annotations** does nothing | Rebuild the iOS app (`npm run ios:dev`); the native code changed. Then open Safari → **Develop** → your iPhone or Simulator → the app → **Console**, and try again. The app logs `[export] 1/3`, `2/3` and `3/3`; the last line shown is where it stopped, and `[export] failed:` gives the reason. |
 | macOS, iOS, Android: **Print** does nothing | Check the browser console for `[native] Could not check native printing`. Make sure `native-print:default` is in `capabilities/default.json`, then rebuild. Re-run `android:init` / `ios:init` after adding the plugin the first time. |
 | Android: "No print services" or no printers | Android always offers **Save as PDF**. For a real printer, install the printer maker's print service (or *Default Print Service*) from Google Play. |
 | macOS: "app is damaged" or can't be opened | The build is unsigned. Right-click the app, choose **Open**, or sign and notarize it. |

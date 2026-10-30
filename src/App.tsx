@@ -244,23 +244,32 @@ export default function App() {
     const format: 'Json' | 'Xfdf' = args.exportData?.annotationDataFormat === 'Xfdf' ? 'Xfdf' : 'Json';
     const ext = format === 'Xfdf' ? 'xfdf' : 'json';
     const name = `${baseName(doc?.name ?? 'document')}.${ext}`;
+    console.info(`[export] 1/3 reading annotations as ${format}`);
+    setToast('Preparing annotations…');
     exportingNatively.current = true;
     // Guard: the viewer never resolves when there is nothing to export.
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000));
     Promise.race([Promise.resolve(v.exportAnnotationsAsBase64String(format as never)), timeout])
       .then((data: unknown) => {
         exportingNatively.current = false;
-        if (!data) throw new Error('There are no annotations to export.');
-        return saveFile(exportBytes(data), name, {
+        if (!data) throw new Error('the viewer returned no annotation data');
+        const bytes = exportBytes(data);
+        console.info(`[export] 2/3 got ${bytes.length} bytes; opening the save screen for ${name}`);
+        setToast('Choose where to save the annotations');
+        return saveFile(bytes, name, {
           name: format === 'Xfdf' ? 'XFDF annotations' : 'JSON annotations',
           extensions: [ext],
         });
       })
-      .then((saved) => setToast(saved ? `Annotations exported to ${name}` : 'Export cancelled'))
+      .then((saved) => {
+        console.info(`[export] 3/3 ${saved ? 'saved' : 'cancelled'}`);
+        setToast(saved ? `Annotations exported to ${name}` : 'Export cancelled');
+      })
       .catch((e: unknown) => {
         exportingNatively.current = false;
-        console.error('[export] Could not export annotations', e);
-        setToast(`Could not export annotations: ${e instanceof Error ? e.message : String(e)}`);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[export] failed:', msg);
+        setToast(`Could not export annotations: ${msg}`);
       });
   };
 
