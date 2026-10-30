@@ -1,5 +1,5 @@
 // Copies the Syncfusion PDF Viewer engine (PDFium WebAssembly) into public/
-// so the viewer runs fully offline on web, desktop (Electron) and mobile (Capacitor).
+// so the viewer runs fully offline on web, desktop and mobile (Tauri).
 import { cpSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

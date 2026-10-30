@@ -1,52 +1,138 @@
-# Syncfusion PDF Editor: one sample for web, desktop and mobile
+# Syncfusion PDF Editor (Tauri edition)
 
-This is a free PDF editor built on the **Syncfusion React PDF Viewer**. One React code base runs as:
+This is a free PDF editor built on the **Syncfusion React PDF Viewer** and packaged with **Tauri 2**. One React code base and one native shell cover every platform:
 
-| Platform | Shell | Output |
+| Platform | Command | Output |
 |---|---|---|
-| **Web** | Vite (static site) | `dist/` folder you can host on any web server |
-| **Desktop** | Electron | Windows installer and portable `.exe` (macOS `.dmg` and Linux AppImage also supported) |
-| **Mobile** | Capacitor | Android app (Android Studio) and iOS app (Xcode on a Mac) |
+| **Web** | `npm run build` | `dist/` folder for any static web host |
+| **Windows** | `npm run desktop:build` | `.exe` installer (NSIS) and `.msi` |
+| **macOS** | `npm run desktop:build` (on a Mac) | `.app` and `.dmg` |
+| **Linux** | `npm run desktop:build` (on Linux) | `.deb`, `.rpm`, `.AppImage` |
+| **Android** | `npm run android:build` | `.apk` (or `.aab` for Google Play) |
+| **iOS** | `npm run ios:build` (on a Mac) | `.ipa` through Xcode |
 
-The PDF engine (PDFium WebAssembly) is bundled inside the app. Documents are opened, edited and saved **on the device**, with no server.
+It's the same app as the Electron and Capacitor sample in `..\SyncfusionPdfEditor`. Only the packaging shell is different, so you can compare the two approaches directly.
+
+## Quick start (do these in order)
+
+> **Run `npm install` first.** Every other command (`npm run build`, `npm run dev`, `npm run desktop:dev`) uses tools that `npm install` downloads into `node_modules`. If you skip it, you'll see **`'tsc' is not recognized as an internal or external command`**.
+
+Open **PowerShell** or **Command Prompt** in the project folder and run:
+
+```powershell
+# 1. Go to the project folder
+cd D:\Analysis\PDFrig\SyncfusionPdfEditor-Tauri
+
+# 2. Install packages (once, and again whenever package.json changes)
+npm install
+#    The last lines should include:
+#    [copy-viewer-assets] Copied PDF Viewer engine to ...\public\ej2-pdfviewer-lib
+
+# 3. Add your Syncfusion license key (optional; without it a trial banner shows)
+copy .env.example .env
+notepad .env          # set VITE_SYNCFUSION_LICENSE=your-key, then save
+
+# 4. Try it in the browser
+npm run dev           # open http://127.0.0.1:5173 ; press Ctrl+C to stop
+
+# 5. Build the web app
+npm run build         # creates the dist\ folder
+
+# 6. Run as a desktop app (needs Rust + C++ Build Tools, see section 1)
+npm run desktop:dev   # first run compiles Rust: 3-5 minutes
+
+# 7. Build the Windows installer
+npm run desktop:build # output in src-tauri\target\release\bundle\
+```
+
+Check your tools before step 2:
+
+```powershell
+node -v      # v22.x (v20.19 or later works)
+npm -v       # 10.x
+rustc -V     # 1.85 or later (only needed for steps 6 and 7)
+cargo -V     # must work too; if not, install Rust (section 1) and open a NEW terminal
+```
 
 ## What the sample does
 
-- Opens a bundled 3-page `sample.pdf` on start. Use **Open** to pick your own file.
-- **View:** page navigation, zoom, pan, text selection, search, thumbnails, bookmarks, print.
-- **Annotate:** highlight, underline, strikethrough, squiggly, shapes, measurement (distance, perimeter, area, radius, volume), free text, stamps, sticky notes, ink, comments panel.
-- **Forms:** fill existing fields, form designer (add text boxes, check boxes, radio buttons, drop-downs, signature fields), handwritten signature.
-- **Redaction:** mark areas and apply redaction.
-- **Organize pages:** reorder, rotate, insert, duplicate, delete, import another PDF.
-- **Download:** saves a new copy with every change.
-  - Desktop: uses the normal save dialog.
-  - Android and iOS: uses the system share sheet (Save to Files, Drive, email and so on).
-- **Desktop only:** double-click a PDF or choose "Open with" to open it in the app.
-- A chip in the header shows the current platform (Web, Desktop, Android or iOS), so you can see the same code running everywhere.
+The app wraps the Syncfusion PDF Viewer in a slim top bar and a feature rail of our own. The **viewer's main toolbar stays visible**, with the options our UI already covers hidden. Each rail feature opens the **viewer's own docked toolbar** under it, and nothing floats over the page.
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│ ▣ sample.pdf  · Saved on this device                           Export │  ← our top bar
+├──────┬────────────────────────────────────────────────────────────────┤
+│ View │ Open │ |‹ ‹ 1 of 3 › ›| │ − + 100% │ Select Pan │ Undo Redo │ Comments   Search Print │  ← viewer main toolbar (trimmed)
+│ Anno │ [ viewer's annotation / form designer / redaction toolbar   ✕ ] │  ← opened from the rail
+│ Sign │                                                                │
+│Redact│                        PDF page (viewer)                       │
+│ Org  │                                                                │
+│ Comp │                                                                │
+│ Pages│                                                                │
+└──────┴────────────────────────────────────────────────────────────────┘
+```
+
+| UI part | What it does | Syncfusion API it calls |
+|---|---|---|
+| **Start screen** | Drop zone, Open PDF, Try the sample, task tiles (Annotate, Fill & Sign, Organize, Redact, Compare), and **Continue editing** when a PDF is open | Loads the file into the viewer, then opens that feature. The editor stays loaded underneath, so edits are kept |
+| **Top bar (ours)** | Home, file name and save state, Export a copy | `download()` (native Save As in the Tauri app) |
+| **Viewer main toolbar** | Open, page navigation, zoom, select/pan, undo/redo, comments, search, print | Built in. `toolbarSettings.toolbarItems`; items our UI covers are hidden with `toolbar.showToolbarItem([...], false)` |
+| **Hidden toolbar items** | Annotate, Form Designer, Redaction, Organize (in the rail) and Download (our Export) | Kept configured, because the feature toolbars depend on them, but not shown |
+| **Rail: Annotate** | Opens the viewer's annotation toolbar | `toolbar.showAnnotationToolbar(true)` |
+| **Rail: Fill & Sign** | Opens the viewer's form designer toolbar | `formDesignerToolbarModule.showFormDesignerToolbar()` |
+| **Rail: Redact** | Opens the viewer's redaction toolbar | `toolbar.showRedactionToolbar(true)` |
+| **Rail: Organize** | Opens the viewer's Organize Pages view | `pageOrganizer.openPageOrganizer()` |
+| **Rail: Compare** | Step 1: choose the **Original** and **Modified** PDF (drop, Choose PDF, or Use the open document). Step 2: side-by-side result with the difference panel and synced scrolling | `PdfComparerComponent` |
+| **Rail: Pages** | Opens or closes the viewer's thumbnail pane | `thumbnailView.openThumbnailPane()` / `closeThumbnailPane()` |
+| **Viewer's ✕ on a toolbar** | Closes that toolbar; the rail goes back to View | Reads `isToolbarHidden` on each toolbar module |
+| **Phone** | The rail becomes bottom tabs (View, Annotate, Sign, Pages, More) | Same APIs; `enableDesktopMode` keeps the full toolbars on touch devices |
+
+- **Opening files:** on desktop, double-click a PDF or use "Open with" to open it straight into the editor.
+- **Saving:** in the Tauri app, Export opens the native **Save As** dialog.
+- **Theme:** the Tailwind 3 theme is re-tinted to the app's teal accent, and the viewer follows the system's dark mode.
+- **Compare:** you always choose two documents. **Compare** stays disabled until both the Original and the Modified PDF are set. **Use the sample pair** loads `public/sample.pdf` and `public/sample-v2.pdf` for a quick demo. **Change documents** goes back to the picker.
+- **Switching features:** Organize Pages (and the comment panel, when going to Compare) closes automatically when you pick another feature in the rail.
+
+## How Tauri differs from the Electron + Capacitor sample
+
+| | This sample (Tauri) | Electron + Capacitor sample |
+|---|---|---|
+| Native shells | 1 (Tauri, for desktop and mobile) | 2 |
+| Browser engine | The system's WebView: WebView2 (Windows), WebKit (macOS, iOS, Linux), Android System WebView | Bundled Chromium on desktop; system WebView on mobile |
+| Installer size | Small (a few MB plus the 4 MB PDF engine) | Large (around 80–150 MB with Chromium) |
+| Native code | Rust (`src-tauri/src/lib.rs`, about 70 lines) | JavaScript |
+| Extra tools to install | Rust, plus the platform toolchain | None on desktop |
 
 ## Project layout
 
 ```
-SyncfusionPdfEditor/
-├─ src/
-│  ├─ App.tsx              PDF Viewer, toolbar, document loading, mobile save
-│  ├─ main.tsx             Entry point and theme CSS
-│  ├─ license.ts           Registers the Syncfusion license key from .env
-│  ├─ platform.ts          Detects web / desktop / android / ios, resolves asset URLs
-│  ├─ mobile-save.ts       Android/iOS: write the PDF to Documents and open the share sheet
-│  └─ styles.css           App bar and layout
-├─ public/
-│  ├─ sample.pdf           Sample document (text, floor plan, form fields)
-│  └─ ej2-pdfviewer-lib/   PDFium engine, copied here automatically by "npm install"
-├─ electron/
-│  ├─ main.cjs             Desktop window, app:// protocol, open-with-PDF handling
-│  └─ preload.cjs          Safe bridge between Electron and the web app
+SyncfusionPdfEditor-Tauri/
+├─ src/                        React app (same UI as the other sample)
+│  ├─ App.tsx                  Screens (start, editor, compare), viewer events, actions
+│  ├─ viewer-modes.ts          Hides duplicate toolbar items; opens/closes the viewer's toolbars and panels
+│  ├─ ui/TopBar.tsx            Top bar: home, file name, Export
+│  ├─ ui/Rail.tsx              Left rail (desktop/tablet) and bottom tabs (phone)
+│  ├─ ui/StartScreen.tsx       Start screen: drop zone, open, sample, task tiles
+│  ├─ ui/CompareView.tsx       Compare: choose two PDFs, then PdfComparerComponent
+│  ├─ ui/icons.tsx             Icons for our own UI parts
+│  ├─ native.ts                Tauri bridge: startup file, open-file event, Save As + write
+│  ├─ platform.ts              Detects web / desktop / android / ios; asset URLs
+│  ├─ license.ts, main.tsx, styles.css
+├─ public/sample.pdf           Sample document
+├─ public/sample-v2.pdf        Changed copy of the sample (the Compare sample pair)
+├─ public/ej2-pdfviewer-lib/   PDFium engine, copied here by "npm install"
 ├─ scripts/copy-viewer-assets.mjs
-├─ capacitor.config.ts     Mobile app id, name and web folder
-├─ vite.config.ts, tsconfig.json, index.html
-├─ .env.example            Template for your license key
-└─ package.json            All build scripts
+├─ src-tauri/                  Native shell
+│  ├─ tauri.conf.json          App name, window, CSP, bundle targets, .pdf file association
+│  ├─ capabilities/default.json  Permissions: core, Save As dialog, write the chosen file
+│  ├─ src/lib.rs               Opens PDFs passed by the OS; macOS/iOS "Open with" event
+│  ├─ src/main.rs, build.rs, Cargo.toml
+│  └─ icons/                   App icons for every platform (generated)
+├─ index.html, vite.config.ts, tsconfig.json, package.json
+└─ .env.example                Template for your Syncfusion license key
 ```
+
+`src-tauri/gen/android` and `src-tauri/gen/apple` are created by the `android:init` and `ios:init` commands (steps 6 and 7).
 
 ---
 
@@ -54,186 +140,157 @@ SyncfusionPdfEditor/
 
 | For | Install |
 |---|---|
-| All platforms | [Node.js 22 LTS](https://nodejs.org) (Node 20.19 or later works). Check with `node -v`. |
-| Desktop build for Windows | Nothing extra. Build on Windows. |
-| Desktop build for macOS | A Mac (needed for `.dmg`). |
-| Android | [Android Studio](https://developer.android.com/studio) (Ladybug or later) with an Android SDK and an emulator or a USB-connected phone. Android Studio includes the JDK it needs. |
-| iOS | A Mac with [Xcode](https://developer.apple.com/xcode/) 16 or later, plus an Apple ID for running on a device. |
+| All platforms | [Node.js 22 LTS](https://nodejs.org). Check with `node -v`. |
+| All native builds | [Rust](https://rustup.rs). On Windows choose the default MSVC toolchain. Check with `rustc -V` (1.85 or later). |
+| Windows | [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the **Desktop development with C++** workload. WebView2 is already part of Windows 10 and 11. |
+| macOS | Xcode, or at least the Command Line Tools: `xcode-select --install` |
+| Linux (optional) | `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev build-essential` |
+| Android | [Android Studio](https://developer.android.com/studio). In **SDK Manager** install an Android SDK Platform, **Android SDK Command-line Tools** and **NDK (Side by side)**. |
+| iOS | A Mac with Xcode 16 or later, CocoaPods (`brew install cocoapods`), and an Apple ID or Apple Developer account. |
+
+Full official checklist: [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ## 2. Install and add your license key
 
-Open a terminal (PowerShell on Windows) in this folder:
-
 ```powershell
-cd D:\Analysis\PDFrig\SyncfusionPdfEditor
+cd D:\Analysis\PDFrig\SyncfusionPdfEditor-Tauri
 npm install
+copy .env.example .env
 ```
 
-`npm install` also copies the PDF engine into `public/ej2-pdfviewer-lib`. You should see `[copy-viewer-assets] Copied PDF Viewer engine ...` in the output.
+- Run `npm install` **before any other command**. It downloads TypeScript, Vite, the Tauri CLI and the Syncfusion packages into `node_modules`, and it copies the PDF engine into `public/ej2-pdfviewer-lib`. It takes 1–3 minutes the first time.
+- Paste your Syncfusion key (JavaScript platform, version 35.x) into `.env`:
 
-Next, add your Syncfusion license key:
+  ```
+  VITE_SYNCFUSION_LICENSE=your-key-here
+  ```
 
-1. Copy `.env.example` to `.env`:
-
-   ```powershell
-   copy .env.example .env
-   ```
-
-2. Get a key from [syncfusion.com/account/downloads](https://www.syncfusion.com/account/downloads) (choose **Get License Key**, platform **JavaScript**, version **35.x**). The [free Community License](https://www.syncfusion.com/products/communitylicense) works.
-3. Paste the key into `.env`:
-
-   ```
-   VITE_SYNCFUSION_LICENSE=your-key-here
-   ```
-
-Without a key the app still works, but it shows a trial banner across the top.
+  The [free Community License](https://www.syncfusion.com/products/communitylicense) works. Without a key, a trial banner shows across the top.
 
 ## 3. Web
 
-**Run locally** (with hot reload while you edit code):
-
 ```powershell
-npm run dev
+npm run dev        # http://127.0.0.1:5173 with hot reload
+npm run build      # production build in dist/
+npm run preview    # test the production build at http://127.0.0.1:4173
 ```
 
-Open <http://127.0.0.1:5173>. The sample PDF loads automatically and the header chip shows **Web**.
+To deploy, upload `dist/` to any static host. Make sure the host serves `.wasm` files as `application/wasm`.
 
-**Build for production:**
+## 4. Desktop: Windows (and macOS / Linux)
 
-```powershell
-npm run build
-npm run preview          # optional: test the production build at http://127.0.0.1:4173
-```
-
-To deploy, upload the whole `dist/` folder to any static host: IIS, Azure Static Web Apps, Netlify, GitHub Pages, S3 and so on. No server code is needed.
-
-> Make sure your host serves `.wasm` files as `application/wasm`. Most hosts do this already. On IIS, add a MIME map for `.wasm` in `web.config`.
-
-## 4. Desktop (Electron)
-
-**Run the desktop app:**
+**Run the app during development:**
 
 ```powershell
 npm run desktop:dev
 ```
 
-This builds the web app and opens it in a desktop window. The header chip shows **Desktop**.
+The first run compiles the Rust shell, which takes 3–5 minutes. Later runs take seconds. A desktop window opens with the sample PDF, and the header chip shows **Desktop**.
 
-**Build a Windows installer and a portable exe:**
+**Build installers:**
 
 ```powershell
 npm run desktop:build
 ```
 
-The output goes to `release/`:
+Output in `src-tauri\target\release\bundle\`:
 
-- `Syncfusion PDF Editor Setup 0.1.0.exe`: the installer. It registers the app for `.pdf` files.
-- `Syncfusion PDF Editor 0.1.0.exe`: the portable version, no install needed.
+| OS | Files |
+|---|---|
+| Windows | `nsis\Syncfusion PDF Editor_0.1.0_x64-setup.exe`, `msi\Syncfusion PDF Editor_0.1.0_x64_en-US.msi` |
+| macOS | `macos\Syncfusion PDF Editor.app`, `dmg\Syncfusion PDF Editor_0.1.0_aarch64.dmg` (or `_x64`) |
+| Linux | `deb\`, `rpm\`, `appimage\` |
 
-To check the PDF association, right-click any PDF, choose **Open with → Syncfusion PDF Editor**, and the file opens in the app.
+To check the file association, install the app, right-click any PDF and choose **Open with → Syncfusion PDF Editor**.
 
-**Other operating systems:**
+> The builds are **unsigned**. Windows SmartScreen and macOS Gatekeeper will warn when you open them. For release, sign Windows builds with a code-signing certificate, and sign and notarize macOS builds with an Apple Developer ID. See [Tauri distribution](https://v2.tauri.app/distribute/).
 
-```bash
-npm run desktop:build:mac     # on a Mac   → release/*.dmg
-npm run desktop:build:linux   # on Linux   → release/*.AppImage
-```
+## 5. Desktop: build each OS on its own machine
 
-> The builds are **unsigned**, so Windows SmartScreen shows "Windows protected your PC". Choose **More info → Run anyway**. For public release, sign the app with a code-signing certificate ([electron-builder code signing](https://www.electron.build/code-signing)).
+Tauri builds for the OS it runs on. Build the Windows installer on Windows and the macOS `.dmg` on a Mac. A CI service such as GitHub Actions with [tauri-action](https://github.com/tauri-apps/tauri-action) can build all three automatically.
 
-## 5. Mobile: Android
+## 6. Mobile: Android
 
-**One-time setup.** This creates the `android/` native project:
-
-```powershell
-npm run build
-npx cap add android
-```
-
-**Build and open in Android Studio:**
+**One-time setup** (PowerShell; adjust the paths to your machine):
 
 ```powershell
-npm run mobile:android
+# Android Studio's bundled Java and the SDK/NDK it installed
+$env:JAVA_HOME    = "C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:NDK_HOME     = "$env:ANDROID_HOME\ndk\<version>"
+
+rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+npm run android:init          # creates src-tauri\gen\android
 ```
 
-This builds the web app, copies it into the Android project (`cap sync`), and opens Android Studio. Then:
+**Run on an emulator or a USB-connected phone:**
 
-1. Wait for the Gradle sync to finish (the first time takes a few minutes).
-2. Pick an emulator or a connected phone (with USB debugging turned on).
-3. Click **Run ▶**. The app opens with the sample PDF, the mobile toolbar, and **Android** in the header chip.
+```powershell
+npm run android:dev
+```
 
-**Build an APK or app bundle:** in Android Studio, choose **Build → Generate Signed App Bundle / APK...**. For a quick test, **Build → Build App Bundle(s) / APK(s) → Build APK(s)** creates `android/app/build/outputs/apk/debug/app-debug.apk`.
+**Build an APK:**
 
-When you change the web code, run `npm run mobile:android` again, or `npm run mobile:sync` if Android Studio is already open, then click Run.
+```powershell
+npm run android:build
+```
 
-## 6. Mobile: iOS (Mac only)
+The APK is in `src-tauri\gen\android\app\build\outputs\apk\universal\release\`. It is unsigned: sign it before installing on other phones, or run `npx tauri android build --apk --debug` for a quick test build. For Google Play, build an app bundle with `npx tauri android build --aab`. See [Android code signing](https://v2.tauri.app/distribute/sign/android/).
 
-**One-time setup:**
+## 7. Mobile: iOS (Mac only)
 
 ```bash
-npm run build
-npx cap add ios
+rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
+npm run ios:init              # creates src-tauri/gen/apple
+npm run ios:dev               # simulator or connected iPhone
+npm run ios:build             # release build (.ipa)
 ```
 
-**Build and open in Xcode:**
+Before running on a device, open `src-tauri/gen/apple/*.xcodeproj` in Xcode, select the app target, and under **Signing & Capabilities** choose your Team. For TestFlight and the App Store you need an Apple Developer account. See [iOS code signing](https://v2.tauri.app/distribute/sign/ios/).
 
-```bash
-npm run mobile:ios
-```
-
-Then, in Xcode:
-
-1. Select the **App** target, open **Signing & Capabilities**, and choose your Team (your Apple ID).
-2. Pick a simulator or a connected iPhone.
-3. Click **Run ▶**.
-
-To let users see saved PDFs in the Files app, open `ios/App/App/Info.plist` and add:
-
-```xml
-<key>UIFileSharingEnabled</key><true/>
-<key>LSSupportsOpeningDocumentsInPlace</key><true/>
-```
-
-## 7. All scripts
+## 8. All scripts
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Web dev server with hot reload |
 | `npm run build` | Type-check and build the web app into `dist/` |
 | `npm run preview` | Serve the production build locally |
-| `npm run desktop:dev` | Build and run the Electron desktop app |
-| `npm run desktop:build` | Windows installer and portable exe in `release/` |
-| `npm run desktop:build:mac` / `:linux` | macOS dmg or Linux AppImage |
-| `npm run mobile:sync` | Build and copy the web app into the Android and iOS projects |
-| `npm run mobile:android` | Build, sync and open Android Studio |
-| `npm run mobile:ios` | Build, sync and open Xcode |
+| `npm run desktop:dev` | Run the Tauri desktop app (hot reload) |
+| `npm run desktop:build` | Desktop installers for the current OS |
+| `npm run android:init` / `android:dev` / `android:build` | Create, run and build the Android app |
+| `npm run ios:init` / `ios:dev` / `ios:build` | Create, run and build the iOS app (Mac only) |
 
-## 8. How the single code base works
+## 9. How it works
 
-- **One UI.** `src/App.tsx` is the whole app. On phones and narrow screens, the PDF Viewer switches to its built-in mobile toolbar automatically.
-- **Works offline.** `scripts/copy-viewer-assets.mjs` copies the PDFium WebAssembly engine into the app. `resourceUrl` points to that local copy, so no CDN is needed.
-- **Same document loading everywhere.** Documents are passed to the viewer as base64, not as URLs. That way the same code works on `http(s)://` (web), `app://` (Electron) and `capacitor://` (iOS).
-- **Platform-specific code is small and isolated:**
-  - `electron/`: the desktop window and opening PDFs from the operating system.
-  - `src/mobile-save.ts`: on Android and iOS, Download goes to the Documents folder and the share sheet, because mobile WebViews can't download blob files.
-- **Vite `base: './'`** keeps every asset path relative, so one build in `dist/` serves all three shells.
+- **One UI.** `src/App.tsx` is the whole app. On phones the PDF Viewer switches to its built-in mobile toolbar automatically.
+- **Works offline.** The PDFium WebAssembly engine is bundled into the app, and `resourceUrl` points to it.
+- **Same document loading everywhere.** Documents are passed to the viewer as base64, so the same code works on `http(s)://` (web), `tauri://localhost` (macOS, iOS, Linux) and `http://tauri.localhost` (Windows, Android).
+- **Opening from the OS.** `src-tauri/src/lib.rs` reads a PDF passed on the command line (Windows and Linux "Open with"). It also forwards the macOS and iOS "Open with" event. The web app picks these up in `src/native.ts`.
+- **Saving.** In Tauri, the viewer's Download is intercepted (`downloadStart`). The edited PDF comes from `saveAsBlob()`, the official `dialog` plugin shows Save As, and the official `fs` plugin writes the file. Only the file the user picks is writable (`capabilities/default.json`).
+- **Content Security Policy** in `tauri.conf.json` allows only the app's own files, WebAssembly, and the theme's Google font.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| Blank viewer, console says `pdfium.wasm` not found | Run `npm install` again, or `node scripts/copy-viewer-assets.mjs`, and check that `public/ej2-pdfviewer-lib/` has `pdfium.js` and `pdfium.wasm`. |
-| Trial banner at the top | Add `VITE_SYNCFUSION_LICENSE` to `.env`, then rebuild. The key must match the package version (35.x). |
-| `npm install` fails behind a company proxy | Run `npm config set proxy http://proxy:port` and `npm config set https-proxy http://proxy:port`. |
-| Electron download fails during install | Set `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` and run `npm install` again. |
-| Android Studio: "SDK location not found" | Open the `android` folder in Android Studio once. It creates `local.properties` with your SDK path. |
-| Font looks slightly different offline | The Tailwind 3 theme loads the Inter font from Google Fonts. Offline, it falls back to the system font. To bundle it, run `npm i @fontsource/inter` and add `import '@fontsource/inter'` in `src/main.tsx`. |
+| `'tsc' is not recognized` or `'vite' is not recognized` | Packages aren't installed. Run `npm install` in the project folder, then run the command again. |
+| `npm install` fails with `ETIMEDOUT`, `ECONNRESET` or a certificate error | Usually a company proxy. Run `npm config set proxy http://proxy:port` and `npm config set https-proxy http://proxy:port`, then `npm install` again. |
+| `failed to run 'cargo metadata' ... program not found` | Rust isn't installed, or this terminal can't see it. Install the [C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (**Desktop development with C++**) and [Rust](https://rustup.rs) (`winget install --id Rustlang.Rustup`), then **close all terminals and open a new one**. Check with `cargo -V`. If it's still not found, add `%USERPROFILE%\.cargo\bin` to your user PATH. |
+| `'tauri' is not recognized` | Run it through npm (`npm run desktop:dev`), not as a bare `tauri` command, and make sure `npm install` finished. |
+| `npm run desktop:dev` fails with a linker or `link.exe` error on Windows | Install Microsoft C++ Build Tools with **Desktop development with C++**, then open a new terminal. |
+| `cargo` not found | Install Rust from rustup.rs and open a new terminal. |
+| Blank viewer | Run `npm install` again, or `node scripts/copy-viewer-assets.mjs`, and check that `public/ej2-pdfviewer-lib/` has `pdfium.js` and `pdfium.wasm`. |
+| Trial banner | Add `VITE_SYNCFUSION_LICENSE` to `.env`, then rebuild. |
+| Android: "NDK not found" or "ANDROID_HOME not set" | Install the NDK in Android Studio's SDK Manager, and set `ANDROID_HOME` and `NDK_HOME` as in step 6. |
+| Android: Save As shows but the file doesn't appear | Check the folder you picked in the Files app. Android save locations use content URIs; test on a real phone. |
+| macOS: "app is damaged" or can't be opened | The build is unsigned. Right-click the app, choose **Open**, or sign and notarize it. |
+| Fonts look slightly different offline | The theme loads Inter from Google Fonts and falls back to the system font offline. To bundle it, run `npm i @fontsource/inter` and add `import '@fontsource/inter'` in `src/main.tsx`, then remove the Google Fonts entries from the CSP. |
 
-## 10. Notes
+## 11. Notes
 
-- **Telemetry.** The Syncfusion base package can send anonymous component-usage events in development builds. To turn this off, set `VITE_DISABLE_TELEMETRY=true` in `.env`. Your documents are never sent.
-- **Versions used:** Syncfusion PDF Viewer 35.1.40, React 19.2, Vite 8.3, Electron 44.7, electron-builder 26.17, Capacitor 8.5.
-- **Next steps for the product:**
-  - Sign the desktop and mobile builds.
-  - Add an app icon (`build/icon.ico` for Electron; `npx @capacitor/assets generate` for mobile).
-  - Move from this sample to the full Phase 1 UI (mode tabs, start screen, recent files).
+- **Telemetry.** Set `VITE_DISABLE_TELEMETRY=true` in `.env` to turn off Syncfusion's anonymous component-usage telemetry in development builds. Documents are never sent.
+- **Versions used:** Syncfusion PDF Viewer 35.1.40, React 19.2, Vite 8.3, Tauri 2.12 (CLI 2.12.2, dialog plugin 2.8.2, fs plugin 2.7.0).
+- **Not yet in this sample:**
+  - Opening PDFs from other apps on Android and iOS (the mobile file association). That needs intent filters and document types in the generated mobile projects.
+  - Single-instance behaviour on Windows. Each double-click opens a new window; the `tauri-plugin-single-instance` plugin would fix this.

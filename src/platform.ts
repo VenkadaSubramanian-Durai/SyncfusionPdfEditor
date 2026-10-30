@@ -1,25 +1,16 @@
-import { Capacitor } from '@capacitor/core';
-
-/** Bridge exposed by electron/preload.cjs (desktop only). */
-export interface DesktopBridge {
-  readonly platform: string;
-  /** Called when the OS asks the app to open a PDF (double-click, "Open with"). */
-  onOpenFile(callback: (file: { name: string; base64: string }) => void): void;
-}
-
-declare global {
-  interface Window {
-    desktop?: DesktopBridge;
-  }
-}
+import { isTauri } from '@tauri-apps/api/core';
 
 export type AppPlatform = 'web' | 'desktop' | 'android' | 'ios';
 
+/** True when running inside the Tauri shell (desktop or mobile). */
+export const inTauri = isTauri();
+
 export function getPlatform(): AppPlatform {
-  if (window.desktop) return 'desktop';
-  const native = Capacitor.getPlatform();
-  if (native === 'android' || native === 'ios') return native;
-  return 'web';
+  if (!inTauri) return 'web';
+  const ua = navigator.userAgent;
+  if (/Android/i.test(ua)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  return 'desktop';
 }
 
 export const platformLabel: Record<AppPlatform, string> = {
@@ -31,7 +22,8 @@ export const platformLabel: Record<AppPlatform, string> = {
 
 /**
  * Absolute URL of the bundled PDFium engine. Built from document.baseURI so it
- * resolves correctly on http(s)://, app:// (Electron) and capacitor:// (iOS).
+ * resolves on http(s):// (web and dev server), tauri://localhost (macOS, iOS,
+ * Linux) and http://tauri.localhost (Windows, Android).
  */
 export const viewerResourceUrl = new URL('ej2-pdfviewer-lib', document.baseURI).href;
 export const sampleDocumentUrl = new URL('sample.pdf', document.baseURI).href;

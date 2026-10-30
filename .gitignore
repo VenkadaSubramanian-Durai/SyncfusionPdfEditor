@@ -1,7 +1,7 @@
 node_modules/
 dist/
 release/
-android/
-ios/
 .env
 public/ej2-pdfviewer-lib/
+src-tauri/target/
+src-tauri/gen/

@@ -1,82 +1,40 @@
 {
-  "name": "syncfusion-pdf-editor",
+  "name": "syncfusion-pdf-editor-tauri",
   "version": "0.1.0",
   "private": true,
-  "description": "Free PDF Editor sample built on Syncfusion PDF Viewer. One React codebase for web, desktop (Electron) and mobile (Capacitor).",
-  "author": "Syncfusion PDF Viewer team",
+  "description": "Free PDF Editor sample built on Syncfusion PDF Viewer. One React codebase packaged with Tauri 2 for web, Windows, macOS, Linux, Android and iOS.",
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
     "postinstall": "node scripts/copy-viewer-assets.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "desktop:dev": "npm run build && electron .",
-    "desktop:build": "npm run build && electron-builder --win",
-    "desktop:build:mac": "npm run build && electron-builder --mac",
-    "desktop:build:linux": "npm run build && electron-builder --linux",
-    "mobile:sync": "npm run build && cap sync",
-    "mobile:android": "npm run build && cap sync android && cap open android",
-    "mobile:ios": "npm run build && cap sync ios && cap open ios"
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build --apk",
+    "ios:init": "tauri ios init",
+    "ios:dev": "tauri ios dev",
+    "ios:build": "tauri ios build"
   },
   "dependencies": {},
   "devDependencies": {
-    "@capacitor/android": "8.5.3",
-    "@capacitor/cli": "8.5.3",
-    "@capacitor/core": "8.5.3",
-    "@capacitor/filesystem": "8.1.4",
-    "@capacitor/ios": "8.5.3",
-    "@capacitor/share": "8.0.3",
     "@syncfusion/ej2-base": "35.1.37",
     "@syncfusion/ej2-pdfviewer": "35.1.40",
     "@syncfusion/ej2-react-pdfviewer": "35.1.40",
     "@syncfusion/ej2-tailwind3-theme": "35.1.40",
+    "@tauri-apps/api": "2.12.3",
+    "@tauri-apps/cli": "2.12.2",
+    "@tauri-apps/plugin-dialog": "2.8.2",
+    "@tauri-apps/plugin-fs": "2.7.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.1.2",
-    "electron": "44.7.0",
-    "electron-builder": "26.17.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "6.0.3",
     "vite": "8.3.4"
-  },
-  "build": {
-    "appId": "com.syncfusion.pdfeditor.sample",
-    "productName": "Syncfusion PDF Editor",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "package.json",
-      "!node_modules/**/*"
-    ],
-    "fileAssociations": [
-      {
-        "ext": "pdf",
-        "name": "PDF document",
-        "role": "Editor"
-      }
-    ],
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "category": "public.app-category.productivity"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ]
-    },
-    "publish": null
   }
 }
