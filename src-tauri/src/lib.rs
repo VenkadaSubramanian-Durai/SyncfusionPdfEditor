@@ -59,6 +59,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_native_print::init())
         .manage(StartupFile(Mutex::new(startup)))
         .invoke_handler(tauri::generate_handler![take_startup_file])
         .build(tauri::generate_context!())

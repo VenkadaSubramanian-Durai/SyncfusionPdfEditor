@@ -17,6 +17,8 @@ tauri-build = { version = "2.7.2", features = [] }
 tauri = { version = "2.12.3", features = [] }
 tauri-plugin-dialog = "2.8.2"
 tauri-plugin-fs = "2.7.0"
+# Local plugin: native print screen on macOS, iOS and Android (see plugins/native-print).
+tauri-plugin-native-print = { path = "plugins/native-print" }
 serde = { version = "1", features = ["derive"] }
 base64 = "0.22"
 

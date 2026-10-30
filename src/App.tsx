@@ -16,10 +16,14 @@ import {
   ThumbnailView,
   Toolbar,
   type DownloadStartEventArgs,
+  type ExportStartEventArgs,
+  type ExportSuccessEventArgs,
+  type ExportFailureEventArgs,
+  type PrintStartEventArgs,
   type ToolbarItem,
 } from '@syncfusion/ej2-react-pdfviewer';
 import { getPlatform, inTauri, sampleDocumentUrl, viewerResourceUrl } from './platform';
-import { onOpenFile, savePdf, takeStartupFile } from './native';
+import { onOpenFile, printPdf, saveFile, savePdf, takeStartupFile, usesNativePrint } from './native';
 import {
   applyMode,
   currentMode,
@@ -73,6 +77,19 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 const fetchBase64 = async (url: string) => arrayBufferToBase64(await (await fetch(url)).arrayBuffer());
 const fileBase64 = async (f: File) => arrayBufferToBase64(await f.arrayBuffer());
 
+/** Export data from the viewer may be bytes, a data: URL / base64 string, or plain text. */
+function exportBytes(data: unknown): Uint8Array {
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (typeof data === 'string') {
+    const base64 = data.includes('base64,') ? data.split('base64,')[1] : null;
+    if (base64) return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    return new TextEncoder().encode(data);
+  }
+  return new TextEncoder().encode(JSON.stringify(data ?? {}));
+}
+const baseName = (name: string) => name.replace(/\.[^.]+$/, '') || 'document';
+
 function useMedia(query: string) {
   const [match, setMatch] = useState(() => window.matchMedia(query).matches);
   useEffect(() => {
@@ -96,7 +113,11 @@ export default function App() {
   const [mode, setMode] = useState<EditMode>('view');
   // Task chosen on the start screen; applied once the document has loaded.
   const pendingTask = useRef<StartTask | null>(null);
+  // True while our own export call runs, so its events don't loop back into the handlers.
+  const exportingNatively = useRef(false);
   const [thumbsOpen, setThumbsOpen] = useState(false);
+  // Organize Pages is open (phones hide the bottom tabs so the dialog gets the full height).
+  const [organizing, setOrganizing] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [saveState, setSaveState] = useState('Saved on this device');
   const [toast, setToast] = useState('');
@@ -163,7 +184,7 @@ export default function App() {
     const task = pendingTask.current;
     pendingTask.current = null;
     if (task === 'annotate' || task === 'sign' || task === 'redact') changeMode(task);
-    if (task === 'organize') setTimeout(() => openOrganizer(v), 300);
+    if (task === 'organize') setTimeout(() => showOrganizer(v), 300);
   };
 
   // Keep the rail in sync when the user closes a feature toolbar with the viewer's own X.
@@ -195,7 +216,70 @@ export default function App() {
       });
   };
 
+  // macOS, iOS and Android: window.print() shows nothing there, so the edited PDF
+  // (annotations, form data and page changes included) goes to the OS print screen.
+  // Windows, Linux and the web keep the viewer's own print.
+  const onPrintStart = (args: PrintStartEventArgs) => {
+    if (!usesNativePrint() || !viewer.current) return;
+    args.cancel = true;
+    const v = viewer.current;
+    const name = v.downloadFileName || args.fileName || 'document.pdf';
+    setToast('Opening the print screen…');
+    v.saveAsBlob()
+      .then((blob) => printPdf(blob, name))
+      .then((printed) => setToast(printed ? `Sent ${name} to print` : 'Printing cancelled'))
+      .catch((e: unknown) => {
+        console.error('[print] Could not print the PDF', e);
+        setToast(`Could not print: ${e instanceof Error ? e.message : String(e)}`);
+      });
+  };
+
+  // Export annotations (comment panel menu). The viewer saves the file with a browser
+  // download link, which the app WebViews ignore (iOS does nothing). In the app we
+  // take the data and save it with the native Save As / "Save to Files" sheet instead.
+  const onExportStart = (args: ExportStartEventArgs) => {
+    if (!inTauri || exportingNatively.current || !viewer.current) return;
+    args.cancel = true;
+    const v = viewer.current;
+    const format: 'Json' | 'Xfdf' = args.exportData?.annotationDataFormat === 'Xfdf' ? 'Xfdf' : 'Json';
+    const ext = format === 'Xfdf' ? 'xfdf' : 'json';
+    const name = `${baseName(doc?.name ?? 'document')}.${ext}`;
+    exportingNatively.current = true;
+    // Guard: the viewer never resolves when there is nothing to export.
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000));
+    Promise.race([Promise.resolve(v.exportAnnotationsAsBase64String(format as never)), timeout])
+      .then((data: unknown) => {
+        exportingNatively.current = false;
+        if (!data) throw new Error('There are no annotations to export.');
+        return saveFile(exportBytes(data), name, {
+          name: format === 'Xfdf' ? 'XFDF annotations' : 'JSON annotations',
+          extensions: [ext],
+        });
+      })
+      .then((saved) => setToast(saved ? `Annotations exported to ${name}` : 'Export cancelled'))
+      .catch((e: unknown) => {
+        exportingNatively.current = false;
+        console.error('[export] Could not export annotations', e);
+        setToast(`Could not export annotations: ${e instanceof Error ? e.message : String(e)}`);
+      });
+  };
+
+  // Web: the viewer downloads the file itself; confirm it with a message.
+  const onExportSuccess = (args: ExportSuccessEventArgs) => {
+    if (inTauri) return; // the app shows its own message once the file is saved
+    setToast(`Annotations exported${args.fileName ? ` (${args.fileName})` : ''}`);
+  };
+  const onExportFailed = (args: ExportFailureEventArgs) => {
+    setToast(`Could not export annotations${args.errorDetails ? `: ${args.errorDetails}` : ''}`);
+  };
+
   // ---- actions from our UI ----
+  const showOrganizer = (v: PdfViewerComponent) => {
+    setOrganizing(true);
+    // Open after React has hidden the bottom tabs, so the dialog sizes to the full height.
+    setTimeout(() => openOrganizer(v, () => setOrganizing(false)), 50);
+  };
+
   const changeMode = (m: EditMode) => {
     const v = viewer.current;
     if (!v) return;
@@ -215,7 +299,7 @@ export default function App() {
     // Organize Pages is a full-screen dialog; close it before any other feature.
     closeOverlays(v);
     if (item === 'organize') {
-      openOrganizer(v);
+      showOrganizer(v);
       return;
     }
     if (item === 'pages') {
@@ -262,7 +346,7 @@ export default function App() {
   // A document is open: the editor stays mounted (edits are kept) and the start
   // screen and Compare open on top of it.
   return (
-    <div className={`app editor${phone ? ' phone' : ''}`}>
+    <div className={`app editor${phone ? ' phone' : ''}${organizing ? ' organizing' : ''}`}>
       <TopBar
         fileName={doc?.name ?? ''}
         saveState={saveState}
@@ -281,6 +365,7 @@ export default function App() {
               resourceUrl={viewerResourceUrl}
               documentPath={doc.base64}
               downloadFileName={doc.name}
+              exportAnnotationFileName={baseName(doc.name)}
               toolbarSettings={{ showTooltip: true, toolbarItems }}
               enablePageOrganizer={true}
               enableFormDesigner={true}
@@ -290,6 +375,10 @@ export default function App() {
               annotationAdd={() => setSaveState('Edited · not saved yet')}
               formFieldAdd={() => setSaveState('Edited · not saved yet')}
               downloadStart={onDownloadStart}
+              printStart={onPrintStart}
+              exportStart={onExportStart}
+              exportSuccess={onExportSuccess}
+              exportFailed={onExportFailed}
               style={{ height: '100%', display: 'block' }}
             >
               <Inject
@@ -314,7 +403,7 @@ export default function App() {
         </main>
       </div>
 
-      {phone && <Rail phone={true} isOn={railOn} onSelect={onRail} />}
+      {phone && !organizing && <Rail phone={true} isOn={railOn} onSelect={onRail} />}
 
       {phone && moreOpen && <div className="sheet-backdrop" onClick={() => setMoreOpen(false)} />}
       {phone && moreOpen && (

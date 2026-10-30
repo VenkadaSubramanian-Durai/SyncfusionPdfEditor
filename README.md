@@ -100,7 +100,7 @@ The app wraps the Syncfusion PDF Viewer in a slim top bar and a feature rail of 
 | Native shells | 1 (Tauri, for desktop and mobile) | 2 |
 | Browser engine | The system's WebView: WebView2 (Windows), WebKit (macOS, iOS, Linux), Android System WebView | Bundled Chromium on desktop; system WebView on mobile |
 | Installer size | Small (a few MB plus the 4 MB PDF engine) | Large (around 80–150 MB with Chromium) |
-| Native code | Rust (`src-tauri/src/lib.rs`, about 70 lines) | JavaScript |
+| Native code | Rust (`src-tauri/src/lib.rs`) plus a small print plugin (Rust, Swift, Kotlin) | JavaScript |
 | Extra tools to install | Rust, plus the platform toolchain | None on desktop |
 
 ## Project layout
@@ -115,7 +115,7 @@ SyncfusionPdfEditor-Tauri/
 │  ├─ ui/StartScreen.tsx       Start screen: drop zone, open, sample, task tiles
 │  ├─ ui/CompareView.tsx       Compare: choose two PDFs, then PdfComparerComponent
 │  ├─ ui/icons.tsx             Icons for our own UI parts
-│  ├─ native.ts                Tauri bridge: startup file, open-file event, Save As + write
+│  ├─ native.ts                Tauri bridge: startup file, open-file event, Save As + write, native print
 │  ├─ platform.ts              Detects web / desktop / android / ios; asset URLs
 │  ├─ license.ts, main.tsx, styles.css
 ├─ public/sample.pdf           Sample document
@@ -126,6 +126,10 @@ SyncfusionPdfEditor-Tauri/
 │  ├─ tauri.conf.json          App name, window, CSP, bundle targets, .pdf file association
 │  ├─ capabilities/default.json  Permissions: core, Save As dialog, write the chosen file
 │  ├─ src/lib.rs               Opens PDFs passed by the OS; macOS/iOS "Open with" event
+│  ├─ plugins/native-print/    Print on macOS, iOS and Android (see "Printing" below)
+│  │  ├─ src/macos.rs          macOS: PDFKit + standard Print panel
+│  │  ├─ ios/Sources/          iOS/iPadOS: AirPrint sheet (Swift)
+│  │  └─ android/src/          Android: system print screen (Kotlin)
 │  ├─ src/main.rs, build.rs, Cargo.toml
 │  └─ icons/                   App icons for every platform (generated)
 ├─ index.html, vite.config.ts, tsconfig.json, package.json
@@ -268,7 +272,50 @@ Before running on a device, open `src-tauri/gen/apple/*.xcodeproj` in Xcode, sel
 - **Same document loading everywhere.** Documents are passed to the viewer as base64, so the same code works on `http(s)://` (web), `tauri://localhost` (macOS, iOS, Linux) and `http://tauri.localhost` (Windows, Android).
 - **Opening from the OS.** `src-tauri/src/lib.rs` reads a PDF passed on the command line (Windows and Linux "Open with"). It also forwards the macOS and iOS "Open with" event. The web app picks these up in `src/native.ts`.
 - **Saving.** In Tauri, the viewer's Download is intercepted (`downloadStart`). The edited PDF comes from `saveAsBlob()`, the official `dialog` plugin shows Save As, and the official `fs` plugin writes the file. Only the file the user picks is writable (`capabilities/default.json`).
+- **Exporting annotations.** In a browser the viewer downloads the `.json` / `.xfdf` file itself, and the `exportSuccess` event shows "Annotations exported". The app WebViews ignore the viewer's download link, and on iOS nothing happens at all. So the app handles `exportStart` instead: it cancels the viewer's export, reads the data with `exportAnnotationsAsBase64String()`, saves it with the native Save As dialog (the **Save to Files** sheet on iOS), and shows the message.
+- **Saving on iOS.** On iOS, the dialog plugin's Save As only returns a location the app can't write to. So on iOS, `saveFile()` in `src/native.ts` hands the finished file to the **Save to Files** sheet (the `save_file` command in `plugins/native-print`). This covers both the edited PDF and exported annotations.
+- **Organize Pages on phones.** The app keeps `enableDesktopMode` on for the editor toolbars. On a phone that would squeeze the desktop organizer (overlapping toolbar, no room for the Save buttons). `openOrganizer()` in `src/viewer-modes.ts` therefore switches the viewer to its mobile organizer while the organizer is open: an icon toolbar, with **Save** and **Save As** in the **⋮** menu. It also hides the bottom tabs, then switches back when the organizer closes.
+- **Printing.** See the next section.
 - **Content Security Policy** in `tauri.conf.json` allows only the app's own files, WebAssembly, and the theme's Google font.
+
+### Printing
+
+The PDF Viewer prints by turning pages into images and calling `window.print()`. What happens next depends on the platform:
+
+| Platform | What the user sees | How |
+|---|---|---|
+| Web (any browser) | Browser print preview | Viewer's own print (`window.print()`) |
+| Windows | Edge print preview → Windows printers | Viewer's own print. WebView2 handles `window.print()` |
+| Linux | GTK print dialog | Viewer's own print. WebKitGTK handles `window.print()` |
+| **macOS** | Standard macOS Print panel | `plugins/native-print`: PDFKit `printOperation` |
+| **iPhone / iPad** | AirPrint sheet (a popover on iPad) | `plugins/native-print`: `UIPrintInteractionController` |
+| **Android** | System print screen (printers, **Save as PDF**) | `plugins/native-print`: `PrintManager` |
+
+On macOS, iOS and Android, `window.print()` doesn't open a print screen in the system WebView. The app handles this in the `printStart` event:
+
+1. Cancel the viewer's print (`args.cancel = true`).
+2. Get the edited PDF with `saveAsBlob()`. It includes annotations, form data and page changes.
+3. Send the bytes to `plugin:native-print|print_pdf`. The plugin writes them to the app's private cache folder and opens the OS print screen.
+
+The real PDF is printed, not page images, so the text stays sharp.
+
+Code: `onPrintStart` in `src/App.tsx`, `printPdf` in `src/native.ts`, and the plugin in `src-tauri/plugins/native-print`. Permission: `native-print:default` in `capabilities/default.json`.
+
+**Test checklist**
+
+| Platform | Steps | Expected |
+|---|---|---|
+| macOS | `npm run desktop:dev` → open a PDF → add a comment → **Print** | macOS Print panel opens; the preview shows the comment. Cancel shows "Printing cancelled" |
+| iPhone | `npm run ios:dev` → **More → Print** | AirPrint sheet slides up. Use **Save to Files** (or a printer) to check the output |
+| iPad | `npm run ios:dev` on an iPad (or the iPad simulator) → **Print** | AirPrint sheet opens as a popover in the middle of the screen |
+| Android | `npm run android:dev` → **More → Print** | System print screen opens. Choose **Save as PDF** and check the saved file |
+| Windows / Linux | `npm run desktop:dev` → **Print** | Same as before (no change) |
+| iPhone / iPad: export annotations | Add a comment → open **Comments** → **⋮ → Export annotations** (JSON or XFDF) | **Save to Files** sheet opens. After saving, the message "Annotations exported to sample.json" shows |
+| iPhone / iPad: Export PDF | Top bar **Export** | **Save to Files** sheet opens; the saved PDF opens in Files with your edits |
+| iPhone / Android: Organize Pages | Bottom tab **Pages** | Full-height organizer with an icon toolbar. **⋮** has Save and Save As. The bottom tabs come back after closing |
+| Web: export annotations | Same as above in a browser | File downloads, and the message "Annotations exported (sample.json)" shows |
+
+Simulators have no real printers. On iOS use the **Printer Simulator** (Xcode → Open Developer Tool), and on Android use **Save as PDF**.
 
 ## 10. Troubleshooting
 
@@ -284,13 +331,15 @@ Before running on a device, open `src-tauri/gen/apple/*.xcodeproj` in Xcode, sel
 | Trial banner | Add `VITE_SYNCFUSION_LICENSE` to `.env`, then rebuild. |
 | Android: "NDK not found" or "ANDROID_HOME not set" | Install the NDK in Android Studio's SDK Manager, and set `ANDROID_HOME` and `NDK_HOME` as in step 6. |
 | Android: Save As shows but the file doesn't appear | Check the folder you picked in the Files app. Android save locations use content URIs; test on a real phone. |
+| macOS, iOS, Android: **Print** does nothing | Check the browser console for `[native] Could not check native printing`. Make sure `native-print:default` is in `capabilities/default.json`, then rebuild. Re-run `android:init` / `ios:init` after adding the plugin the first time. |
+| Android: "No print services" or no printers | Android always offers **Save as PDF**. For a real printer, install the printer maker's print service (or *Default Print Service*) from Google Play. |
 | macOS: "app is damaged" or can't be opened | The build is unsigned. Right-click the app, choose **Open**, or sign and notarize it. |
 | Fonts look slightly different offline | The theme loads Inter from Google Fonts and falls back to the system font offline. To bundle it, run `npm i @fontsource/inter` and add `import '@fontsource/inter'` in `src/main.tsx`, then remove the Google Fonts entries from the CSP. |
 
 ## 11. Notes
 
 - **Telemetry.** Set `VITE_DISABLE_TELEMETRY=true` in `.env` to turn off Syncfusion's anonymous component-usage telemetry in development builds. Documents are never sent.
-- **Versions used:** Syncfusion PDF Viewer 35.1.40, React 19.2, Vite 8.3, Tauri 2.12 (CLI 2.12.2, dialog plugin 2.8.2, fs plugin 2.7.0).
+- **Versions used:** Syncfusion PDF Viewer 35.1.40, React 19.2, Vite 8.3, Tauri 2.12 (CLI 2.12.2, dialog plugin 2.8.2, fs plugin 2.7.0), local native-print plugin 0.1.0.
 - **Not yet in this sample:**
   - Opening PDFs from other apps on Android and iOS (the mobile file association). That needs intent filters and document types in the generated mobile projects.
   - Single-instance behaviour on Windows. Each double-click opens a new window; the `tauri-plugin-single-instance` plugin would fix this.

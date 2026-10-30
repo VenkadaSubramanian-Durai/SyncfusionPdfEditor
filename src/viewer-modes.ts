@@ -2,6 +2,7 @@
 // The viewer's built-in main toolbar is hidden; its feature toolbars
 // (annotation, form designer, redaction) are opened from our left rail.
 import type { PdfViewerComponent } from '@syncfusion/ej2-react-pdfviewer';
+import { Browser } from '@syncfusion/ej2-base';
 
 export type EditMode = 'view' | 'annotate' | 'sign' | 'redact';
 
@@ -66,12 +67,31 @@ export function thumbnailsOpen(v: PdfViewerComponent): boolean {
 
 /** Closes Organize Pages (and optionally the comment panel) before switching to another feature. */
 export function closeOverlays(v: PdfViewerComponent, alsoComments = false) {
-  const org = (v as any).pageOrganizerModule ?? (v as any).pageOrganizer;
+  const org = organizer(v);
   if (org?.isOrganizeWindowOpen) org.closePageOrganizer();
   if (alsoComments && (v as any).isCommandPanelOpen) (v as any).isCommandPanelOpen = false;
 }
 
-export function openOrganizer(v: PdfViewerComponent) {
-  (v as any).pageOrganizerModule?.openPageOrganizer?.() ?? (v as any).pageOrganizer?.openPageOrganizer();
+const organizer = (v: PdfViewerComponent): any => (v as any).pageOrganizerModule ?? (v as any).pageOrganizer;
+
+/**
+ * Opens Organize Pages. On phones and tablets (iOS, Android) it uses the viewer's
+ * own mobile layout: compact icon toolbar, "⋮" menu with Save / Save As, touch tiles.
+ * The app keeps enableDesktopMode on for the editor toolbars, which would otherwise
+ * squeeze the desktop organizer onto a small screen, so it is switched off only while
+ * the organizer is open. `onClosed` runs when the user closes it.
+ */
+export function openOrganizer(v: PdfViewerComponent, onClosed?: () => void) {
+  const org = organizer(v);
+  if (!org) return;
+  const mobile = Browser.isDevice && (v as any).enableDesktopMode;
+  if (mobile) (v as any).setProperties({ enableDesktopMode: false }, true);
+  org.openPageOrganizer();
+  const watch = setInterval(() => {
+    if (org.isOrganizeWindowOpen) return;
+    clearInterval(watch);
+    if (mobile) (v as any).setProperties({ enableDesktopMode: true }, true);
+    onClosed?.();
+  }, 300);
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

@@ -1,0 +1,23 @@
+[package]
+name = "tauri-plugin-native-print"
+version = "0.1.0"
+authors = ["Syncfusion"]
+description = "Prints a PDF with the operating system's own print screen on macOS, iOS and Android."
+edition = "2021"
+rust-version = "1.85"
+links = "tauri-plugin-native-print"
+
+[dependencies]
+tauri = { version = "2.12.3" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# macOS: print the PDF with PDFKit + the standard AppKit print panel.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL"] }
+objc2-app-kit = { version = "0.3", features = ["NSPrintInfo", "NSPrintOperation"] }
+objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument", "objc2-app-kit"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2.7.1", features = ["build"] }
