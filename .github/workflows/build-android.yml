@@ -7,29 +7,53 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+    env:
+      NDK_VERSION: 27.0.12077973
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
 
-      - run: npm install
+      - name: Accept Android Licenses
+        run: yes | sdkmanager --licenses
 
-      - run: npm run android:init || true
+      - name: Install Android Components
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;${NDK_VERSION}"
 
-      - run: npm run android:build
+      - name: Install Dependencies
+        run: npm install
 
-      - uses: actions/upload-artifact@v4
+      - name: Initialize Android
+        run: npm run android:init
+
+      - name: Build APK
+        run: npm run android:build
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
