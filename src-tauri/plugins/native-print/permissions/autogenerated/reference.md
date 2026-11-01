@@ -1,13 +1,13 @@
 ## Default Permission
 
-Lets the app print a PDF with the operating system's print screen, and save files with the iOS export sheet.
+Allows the app to report platform features, print PDFs and save files.
 
 #### This default permission set includes the following:
 
-- `allow-print-pdf`
-- `allow-is-supported`
-- `allow-save-file`
 - `allow-features`
+- `allow-is-supported`
+- `allow-print-pdf`
+- `allow-save-file`
 
 ## Permission Table
 

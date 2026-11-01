@@ -1,81 +1,100 @@
-//! Native shell for the Syncfusion PDF Editor sample (Tauri 2).
-//!
-//! The whole UI is the React app in ../src. Rust only does what the web app
-//! cannot: hand over PDFs that the operating system asks us to open
-//! (double-click, "Open with", file association).
-
-use base64::{engine::general_purpose::STANDARD, Engine as _};
-use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-// Emitter and RunEvent are only used on macOS and iOS.
-#[allow(unused_imports)]
-use tauri::{Emitter, RunEvent};
 
-/// A PDF handed over by the operating system.
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use serde::Serialize;
+use tauri::Manager;
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+use tauri::Emitter;
+
+/// A file that the operating system handed over to the application.
 #[derive(Clone, Serialize)]
-struct OpenedFile {
-    name: String,
-    base64: String,
+#[serde(rename_all = "camelCase")]
+pub struct OpenedFile {
+    pub name: String,
+    pub base64: String,
 }
 
-/// PDF passed on the command line at start-up (Windows / Linux file association).
-struct StartupFile(Mutex<Option<PathBuf>>);
+struct StartupFile(Mutex<Option<OpenedFile>>);
 
-fn is_pdf(path: &Path) -> bool {
-    path.extension()
-        .map(|ext| ext.eq_ignore_ascii_case("pdf"))
-        .unwrap_or(false)
+/// Reads the file the application was launched with and clears the slot.
+#[tauri::command]
+fn take_startup_file(state: tauri::State<'_, StartupFile>) -> Option<OpenedFile> {
+    let mut slot = state.0.lock().ok()?;
+    let file = slot.take();
+    file
 }
 
-fn read_pdf(path: &Path) -> Result<OpenedFile, String> {
-    if !is_pdf(path) {
-        return Err("Only PDF files can be opened.".into());
-    }
-    let bytes = std::fs::read(path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
-    Ok(OpenedFile {
-        name: path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "document.pdf".into()),
-        base64: STANDARD.encode(bytes),
+fn file_name_of(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "document.pdf".to_string())
+}
+
+fn read_as_base64(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    Some(BASE64.encode(bytes))
+}
+
+fn opened_file_from(path: &Path) -> Option<OpenedFile> {
+    Some(OpenedFile {
+        name: file_name_of(path),
+        base64: read_as_base64(path)?,
     })
 }
 
-/// Called once by the web app on start-up. Returns the PDF the app was launched
-/// with, if any, so it opens instead of the bundled sample.
-#[tauri::command]
-fn take_startup_file(state: tauri::State<'_, StartupFile>) -> Result<Option<OpenedFile>, String> {
-    let path = state.0.lock().map_err(|e| e.to_string())?.take();
-    path.map(|p| read_pdf(&p)).transpose()
-}
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let startup = std::env::args_os()
+/// The first argument that points at an existing PDF file.
+fn startup_file_path() -> Option<PathBuf> {
+    std::env::args()
         .skip(1)
         .map(PathBuf::from)
-        .find(|p| is_pdf(p));
+        .find(|arg| arg.is_file() && !arg.to_string_lossy().starts_with('-'))
+}
 
-    let app = tauri::Builder::default()
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_native_print::init())
-        .manage(StartupFile(Mutex::new(startup)))
+        .plugin(native_print::init())
+        .manage(StartupFile(Mutex::new(None)))
+        .setup(|app| {
+            // A file passed on the command line is opened at start-up.
+            let startup_file = startup_file_path().and_then(|path| opened_file_from(&path));
+
+            if let Some(file) = startup_file {
+                let state = app.state::<StartupFile>();
+                let mut slot = state.0.lock().unwrap_or_else(|error| error.into_inner());
+                *slot = Some(file);
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![take_startup_file])
         .build(tauri::generate_context!())
-        .expect("error while building the Tauri application");
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // macOS and iOS deliver "Open with" requests while running.
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+            {
+                if let tauri::RunEvent::Opened { urls } = event {
+                    for url in urls {
+                        let Ok(path) = url.to_file_path() else {
+                            continue;
+                        };
 
-    app.run(|_handle, _event| {
-        // macOS and iOS deliver "Open with" files as an event instead of arguments.
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        if let RunEvent::Opened { urls } = &_event {
-            for url in urls {
-                if let Ok(path) = url.to_file_path() {
-                    if let Ok(file) = read_pdf(&path) {
-                        let _ = _handle.emit("open-file", file);
+                        if let Some(file) = opened_file_from(&path) {
+                            let _ = app.emit("open-file", file);
+                        }
                     }
                 }
             }
-        }
-    });
+
+            #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+            {
+                let _ = (app, event);
+            }
+        });
 }

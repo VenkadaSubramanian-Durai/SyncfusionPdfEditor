@@ -1,28 +1,28 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Syncfusion PDF Editor",
-  "version": "0.1.0",
+  "productName": "PDF Editor",
+  "version": "1.0.0",
   "identifier": "com.syncfusion.pdfeditor.sample",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://127.0.0.1:5173",
+    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "label": "main",
-        "title": "Syncfusion PDF Editor",
+        "title": "PDF Editor",
         "width": 1280,
-        "height": 820,
-        "minWidth": 760,
-        "minHeight": 560,
-        "dragDropEnabled": false
+        "height": 800,
+        "minWidth": 480,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost blob: data:; object-src 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost data: blob:; object-src 'self' blob:; media-src 'self' blob: data:"
     }
   },
   "bundle": {
@@ -35,16 +35,32 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "category": "Productivity",
+    "shortDescription": "Edit, sign and compare PDFs on your device.",
+    "longDescription": "A free PDF editor that runs entirely on your device. View, annotate, fill and sign, redact, organize, compare, print and export PDFs without uploading anything.",
+    "copyright": "Copyright © Syncfusion Inc.",
     "fileAssociations": [
       {
         "ext": ["pdf"],
-        "mimeType": "application/pdf",
-        "name": "PDF document",
-        "description": "PDF document",
-        "role": "Editor"
+        "name": "PDF Document",
+        "description": "PDF Document",
+        "role": "Editor",
+        "mimeType": "application/pdf"
       }
     ],
-    "category": "Productivity",
-    "shortDescription": "Free PDF editor built on Syncfusion PDF Viewer"
-  }
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {}
 }

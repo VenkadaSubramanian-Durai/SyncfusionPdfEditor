@@ -1,114 +1,68 @@
-// iOS / iPadOS: print the PDF with the standard AirPrint sheet, and save files
-// (edited PDF, exported annotations) with the system "Save to Files" sheet.
-import SwiftRs
-import Tauri
+import Foundation
 import UIKit
-import WebKit
+import Tauri
 
-class PrintArgs: Decodable {
-  let path: String
-  let name: String?
-}
+/**
+ * Bridges the native print and file picker APIs into the Tauri plugin.
+ *
+ * The plugin calls into this class from `mobile.rs` through
+ * `TauriPlugin.run_mobile_plugin`.
+ */
+public class NativePrintPlugin: Plugin {
 
-class ExportArgs: Decodable {
-  let path: String
-}
-
-/// Resolves the invoke when the "Save to Files" sheet closes.
-class ExportDelegate: NSObject, UIDocumentPickerDelegate {
-  let invoke: Invoke
-  let done: () -> Void
-  init(_ invoke: Invoke, done: @escaping () -> Void) {
-    self.invoke = invoke
-    self.done = done
-  }
-  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-    invoke.resolve(["saved": true])
-    done()
-  }
-  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-    invoke.resolve(["saved": false])
-    done()
-  }
-}
-
-class NativePrintPlugin: Plugin {
-  // The picker holds its delegate weakly; keep it alive until the sheet closes.
-  private var exportDelegate: ExportDelegate?
-
-  /// Shows "Save to Files" for a finished file; iOS copies it to the folder the user picks.
-  @objc public func exportFile(_ invoke: Invoke) throws {
-    let args = try invoke.parseArgs(ExportArgs.self)
-    let url = URL(fileURLWithPath: args.path)
-    DispatchQueue.main.async {
-      guard let presenter = self.topViewController() else {
-        invoke.reject("No window to show the Save sheet.")
-        return
-      }
-      guard FileManager.default.fileExists(atPath: url.path) else {
-        invoke.reject("The file to save was not found.")
-        return
-      }
-      let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
-      let delegate = ExportDelegate(invoke) { [weak self] in self?.exportDelegate = nil }
-      self.exportDelegate = delegate
-      picker.delegate = delegate
-      picker.modalPresentationStyle = .formSheet
-      presenter.present(picker, animated: true)
+    public override func load(_ webview: Tauri.WebView) {
+        super.load(webview)
     }
-  }
 
-  /// The view controller on top (a sheet that is already open can't present another one).
-  private func topViewController() -> UIViewController? {
-    var top = self.manager.viewController
-    while let presented = top?.presentedViewController, !presented.isBeingDismissed {
-      top = presented
-    }
-    return top
-  }
-
-  @objc public func printPdf(_ invoke: Invoke) throws {
-    let args = try invoke.parseArgs(PrintArgs.self)
-    let url = URL(fileURLWithPath: args.path)
-
-    DispatchQueue.main.async {
-      guard UIPrintInteractionController.isPrintingAvailable else {
-        invoke.reject("Printing is not available on this device.")
-        return
-      }
-      guard UIPrintInteractionController.canPrint(url) else {
-        invoke.reject("This PDF cannot be printed.")
-        return
-      }
-
-      let info = UIPrintInfo(dictionary: nil)
-      info.outputType = .general
-      info.jobName = args.name ?? url.lastPathComponent
-
-      let controller = UIPrintInteractionController.shared
-      controller.printInfo = info
-      controller.printingItem = url
-
-      let done: UIPrintInteractionController.CompletionHandler = { _, completed, error in
-        if let error = error {
-          invoke.reject(error.localizedDescription)
-        } else {
-          invoke.resolve(["printed": completed])
+    @objc public func printPdf(payload: JsObject) -> Bool {
+        guard let path = payload["path"] as? String else {
+            return false
         }
-      }
+        let name = (payload["name"] as? String) ?? "document"
 
-      // iPad shows the sheet as a popover, which needs an anchor.
-      if UIDevice.current.userInterfaceIdiom == .pad, let view = self.topViewController()?.view {
-        let anchor = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
-        controller.present(from: anchor, in: view, animated: true, completionHandler: done)
-      } else {
-        controller.present(animated: true, completionHandler: done)
-      }
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return false
+        }
+
+        guard let controller = UIPrintInteractionController.shared else {
+            return false
+        }
+        let info = UIPrintInfo(dictionary: nil)
+        info.jobName = name
+        info.outputType = .general
+        controller.printInfo = info
+        controller.printingItem = url
+        controller.present(animated: true, completionHandler: nil)
+        return true
     }
-  }
+
+    @objc public func exportFile(payload: JsObject) -> Bool {
+        guard let path = payload["path"] as? String else {
+            return false
+        }
+
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return false
+        }
+
+        let picker = UIDocumentPickerViewController(forExporting: [url])
+        DispatchQueue.main.async {
+            UIApplication.shared
+                .keyWindow?
+                .rootViewController?
+                .present(picker, animated: true, completion: nil)
+        }
+        return true
+    }
 }
 
-@_cdecl("init_plugin_native_print")
-public func initPlugin() -> Plugin {
-  return NativePrintPlugin()
+private extension UIApplication {
+    var keyWindow: UIWindow? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first(where: { $0.isKeyWindow })
+    }
 }

@@ -1,24 +1,32 @@
-// Copies the Syncfusion PDF Viewer engine (PDFium WebAssembly) into public/
-// so the viewer runs fully offline on web, desktop and mobile (Tauri).
-import { cpSync, existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const source = join(
-  root,
-  'node_modules',
-  '@syncfusion',
-  'ej2-pdfviewer',
-  'dist',
-  'ej2-pdfviewer-lib',
-);
 const target = join(root, 'public', 'ej2-pdfviewer-lib');
 
-if (!existsSync(source)) {
-  console.error(`[copy-viewer-assets] Not found: ${source}\nRun "npm install" first.`);
+const sources = [
+  join(root, 'node_modules', '@syncfusion', 'ej2-pdfviewer', 'dist', 'ej2-pdfviewer-lib'),
+  join(root, 'node_modules', '@syncfusion', 'ej2-react-pdfviewer', 'dist', 'ej2-pdfviewer-lib')
+];
+
+const assets = ['pdfium.js', 'pdfium.wasm'];
+
+const source = sources.find((candidate) => existsSync(candidate));
+
+if (!source) {
+  console.error('[copy-viewer-assets] Syncfusion PDF viewer library folder not found in node_modules.');
   process.exit(1);
 }
+
 mkdirSync(target, { recursive: true });
-cpSync(source, target, { recursive: true });
-console.log(`[copy-viewer-assets] Copied PDF Viewer engine to ${target}`);
+
+for (const asset of assets) {
+  const from = join(source, asset);
+  if (!existsSync(from)) {
+    console.error('[copy-viewer-assets] Missing asset:', from);
+    process.exit(1);
+  }
+  copyFileSync(from, join(target, asset));
+  console.log('[copy-viewer-assets] copied', asset);
+}

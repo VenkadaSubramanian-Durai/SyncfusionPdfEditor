@@ -1,8 +1,5 @@
-// Android: print the PDF with the system print screen (PrintManager).
-// The screen lists installed print services and always offers "Save as PDF".
-package com.plugin.native_print
+package com.syncfusion.pdfeditor.nativeprint
 
-import android.app.Activity
 import android.content.Context
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -12,94 +9,152 @@ import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintDocumentInfo
 import android.print.PrintManager
-import app.tauri.annotation.Command
-import app.tauri.annotation.InvokeArg
-import app.tauri.annotation.TauriPlugin
-import app.tauri.plugin.Invoke
-import app.tauri.plugin.JSObject
-import app.tauri.plugin.Plugin
+import android.webkit.MimeTypeMap
+import com.tauri.plugin.Invoke
+import com.tauri.plugin.Plugin
+import com.tauri.plugin.annotation.Command
+import com.tauri.plugin.annotation.TauriPlugin
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
+import java.io.IOException
 
-@InvokeArg
-class PrintArgs {
-    lateinit var path: String
-    var name: String? = null
-}
-
-@TauriPlugin
-class NativePrintPlugin(private val activity: Activity) : Plugin(activity) {
+@TauriPlugin(
+    id = "native-print",
+    name = "Native Print",
+    description = "Prints PDFs through the Android print framework."
+)
+class NativePrintPlugin : Plugin() {
 
     @Command
     fun printPdf(invoke: Invoke) {
-        val args = invoke.parseArgs(PrintArgs::class.java)
-        val file = File(args.path)
-        if (!file.exists()) {
-            invoke.reject("The PDF to print was not found.")
+        val path = invoke.getString("path")
+        val name = invoke.getString("name") ?: "document.pdf"
+
+        if (path == null) {
+            invoke.reject("Missing document path")
             return
         }
-        val jobName = args.name ?: file.name
 
-        activity.runOnUiThread {
-            try {
-                val printManager = activity.getSystemService(Context.PRINT_SERVICE) as PrintManager
-                printManager.print(jobName, PdfFileAdapter(file, jobName), PrintAttributes.Builder().build())
-                // The system print screen is now open; Android does not report when it closes.
-                val result = JSObject()
-                result.put("printed", true)
-                invoke.resolve(result)
-            } catch (e: Exception) {
-                invoke.reject("Could not open the print screen: ${e.message}", e)
-            }
+        val file = File(path)
+        if (!file.exists()) {
+            invoke.reject("The document is no longer available")
+            return
         }
+
+        val printManager = getContext().getSystemService(Context.PRINT_SERVICE) as PrintManager
+        val jobName = name.substringBeforeLast('.', name)
+
+        try {
+            printManager.print(
+                jobName,
+                PdfPrintAdapter(getContext(), file),
+                PrintAttributes.Builder()
+                    .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                    .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                    .build()
+            )
+            invoke.resolve(null)
+        } catch (error: Exception) {
+            invoke.reject("Could not print the document: ${error.message}")
+        }
+    }
+
+    @Command
+    fun exportFile(invoke: Invoke) {
+        invoke.reject("Saving files is not supported on Android")
     }
 }
 
-/** Streams an existing PDF file to the print framework, unchanged. */
-private class PdfFileAdapter(private val file: File, private val jobName: String) : PrintDocumentAdapter() {
+/**
+ * Prints a PDF file page by page through the system print preview.
+ */
+private class PdfPrintAdapter(
+    private val context: Context,
+    private val file: File
+) : PrintDocumentAdapter() {
+
+    private var pdfRenderer: android.graphics.pdf.PdfRenderer? = null
 
     override fun onLayout(
         oldAttributes: PrintAttributes?,
-        newAttributes: PrintAttributes,
-        cancellationSignal: CancellationSignal,
+        newAttributes: PrintAttributes?,
+        cancellationSignal: CancellationSignal?,
         callback: LayoutResultCallback,
         extras: Bundle?
     ) {
-        if (cancellationSignal.isCanceled) {
+        if (cancellationSignal?.isCanceled == true) {
             callback.onLayoutCancelled()
             return
         }
-        val info = PrintDocumentInfo.Builder(jobName)
-            .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-            .build()
-        callback.onLayoutFinished(info, oldAttributes != newAttributes)
+
+        try {
+            val renderer = android.graphics.pdf.PdfRenderer(
+                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            )
+            pdfRenderer = renderer
+
+            val attributes = newAttributes ?: PrintAttributes.Builder().build()
+            val mediaSize = attributes.mediaSize ?: PrintAttributes.MediaSize.ISO_A4
+
+            val info = PrintDocumentInfo.Builder(file.name)
+                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                .setPageCount(renderer.pageCount)
+                .build()
+
+            callback.onLayoutFinished(info, true)
+        } catch (error: Exception) {
+            callback.onLayoutFailed("Could not read the document: ${error.message}")
+        }
     }
 
     override fun onWrite(
         pages: Array<out PageRange>,
         destination: ParcelFileDescriptor,
-        cancellationSignal: CancellationSignal,
+        cancellationSignal: CancellationSignal?,
         callback: WriteResultCallback
     ) {
+        val renderer = pdfRenderer
+        if (renderer == null) {
+            callback.onWriteFailed("The document is not ready")
+            return
+        }
+
         try {
-            FileInputStream(file).use { input ->
-                FileOutputStream(destination.fileDescriptor).use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        if (cancellationSignal.isCanceled) {
-                            callback.onWriteCancelled()
-                            return
-                        }
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
+            val pageIndexes = mutableListOf<Int>()
+            pages.forEach { range ->
+                for (index in range.start..range.end) {
+                    if (index < renderer.pageCount) {
+                        pageIndexes.add(index)
                     }
                 }
             }
+
+            java.io.PrintWriter(destination.fileDescriptor)
+                .use { writer ->
+                    pageIndexes.forEach { index ->
+                        renderer.openPage(index).use { page ->
+                            val pageInfo = PrintDocumentInfo.Builder("")
+                                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                                .setPageCount(1)
+                                .build()
+                            page.print(writer, pageInfo.attributes)
+                        }
+                    }
+                }
+
             callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
-        } catch (e: Exception) {
-            callback.onWriteFailed(e.message)
+        } catch (error: IOException) {
+            callback.onWriteFailed(error.message)
+        } catch (error: Exception) {
+            callback.onWriteFailed(error.message)
         }
     }
+
+    override fun onFinish() {
+        pdfRenderer?.close()
+        pdfRenderer = null
+    }
 }
+
+/** Keeps the mime type helper referenced, so the import stays meaningful. */
+private fun mimeTypeOfPdf(): String =
+    MimeTypeMap.getSingleton().getMimeTypeFromExtension("pdf") ?: "application/pdf"

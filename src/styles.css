@@ -1,702 +1,958 @@
-/* PDF Editor shell: our top bar + left rail around the Syncfusion PDF Viewer.
-   Colours are tokens; the viewer's Tailwind 3 theme is re-tinted to the same teal accent. */
-:root {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f6f7f9;
-  --surface-3: #eef0f3;
-  --line: #e3e6eb;
-  --line-2: #cfd4dc;
-  --fg: #0f172a;
-  --muted: #5b6475;
-  --accent: #0f766e;
-  --accent-soft: #e6f4f2;
-  --accent-ink: #ffffff;
-  --good: #047857;
-  --shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px rgb(15 23 42 / 0.1);
-  --f-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+/* ==========================================================================
+   Tokens
 
-  /* Syncfusion Tailwind 3 theme: primary colour -> our teal */
-  --color-sf-primary: rgba(15, 118, 110);
-  --color-sf-primary-light: #2dd4bf;
-  --color-sf-primary-lighter: #ccfbf1;
-  --color-sf-primary-dark: #115e59;
-  --color-sf-primary-darker: #134e4a;
-  --color-sf-primary-bg-color: #0f766e;
-  --color-sf-primary-border-color: #0f766e;
-  --color-sf-primary-bg-color-hover: #115e59;
-  --color-sf-primary-border-color-hover: #115e59;
-  --color-sf-primary-bg-color-pressed: #134e4a;
-  --color-sf-primary-border-color-pressed: #134e4a;
+   The light values are the default and the dark values override them. The
+   `e-dark-mode` class is placed on `<body>` by the app when the operating
+   system asks for a dark colour scheme.
+   ========================================================================== */
+
+:root {
+  --bg: #f4f6f8;
+  --bg-elevated: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-hover: #e9eef2;
+  --border: #d6dde3;
+  --border-strong: #b6c2cc;
+
+  --text: #16202a;
+  --text-muted: #5b6b78;
+  --text-faint: #8a98a4;
+
+  --accent: #0f9b8e;
+  --accent-strong: #0c7f74;
+  --accent-contrast: #ffffff;
+
+  --danger: #d64545;
+  --success: #1f9254;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --rail-width: 76px;
+  --topbar-height: 56px;
+
+  /*
+   * Stacking order.
+
+   * The PDF Viewer renders its tooltips and popups in elements that are
+   * appended to the body. Those elements pick their z-index up from the
+   * stacking context of the app, so the app bar has to stay below them.
+   * The app bar therefore only uses a small value and never competes with
+   * the Syncfusion trial banner, which sits at 999999999.
+   */
+  --z-appbar: 20;
+  --z-overlay: 1000;
+  --z-toast: 1100;
+
+  --font: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #11151d;
-    --surface: #1a202b;
-    --surface-2: #151a23;
-    --surface-3: #232a37;
-    --line: #2a3240;
-    --line-2: #3a4454;
-    --fg: #e8ecf2;
-    --muted: #a3adbd;
-    --accent: #2dd4bf;
-    --accent-soft: #12322f;
-    --accent-ink: #06201d;
-    --good: #34d399;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.45);
-  }
-  body.e-dark-mode {
-    --color-sf-primary: rgba(45, 212, 191);
-    --color-sf-primary-bg-color: #14b8a6;
-    --color-sf-primary-border-color: #14b8a6;
-  }
+body.e-dark-mode {
+  --bg: #111820;
+  --bg-elevated: #171f28;
+  --bg-panel: #1b232d;
+  --bg-hover: #202b36;
+  --border: #2a3641;
+  --border-strong: #3a4855;
+
+  --text: #f2f6f8;
+  --text-muted: #9aa9b6;
+  --text-faint: #6b7a88;
+
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --accent-contrast: #05201c;
+
+  --danger: #f87171;
+  --success: #4ade80;
 }
 
 * {
   box-sizing: border-box;
 }
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
 }
+
 body {
-  font-family: var(--f-ui);
+  font-family: var(--font);
   background: var(--bg);
-  color: var(--fg);
+  color: var(--text);
+  overflow: hidden;
 }
-button {
-  font: inherit;
-  color: inherit;
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
-button:focus-visible,
-input:focus-visible {
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+/* Focus ring for the Syncfusion controls used in the app shell. */
+.rail-item:focus-visible,
+.topbar-home:focus-visible,
+.compare-swap:focus-visible,
+.tile:focus-visible,
+.more-item:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.i {
-  flex: none;
-}
-.muted {
-  color: var(--muted);
-}
-.row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-.grow {
-  flex: 1;
-}
 
-.app {
-  height: 100%;
-  position: relative;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.app.editor {
-  display: grid;
-  grid-template-rows: auto 1fr;
-}
-.app.editor.phone {
-  grid-template-rows: auto 1fr auto;
-}
-
-/* ---- buttons ---- */
-.ib {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  border: 0;
-  background: none;
-  border-radius: 9px;
-  cursor: pointer;
-  color: var(--fg);
-}
-.ib:hover {
-  background: var(--surface-3);
-}
-.ib[aria-pressed='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--line-2);
-  background: var(--surface);
-  height: 34px;
-  padding: 0 13px;
-  border-radius: 9px;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.btn.primary {
+/* The primary Syncfusion buttons use the app accent colour. */
+.e-btn.e-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent-ink);
-}
-.vsep {
-  width: 1px;
-  height: 22px;
-  background: var(--line);
-  margin: 0 4px;
+  color: var(--accent-contrast);
 }
 
-/* ---- top bar (ours) ---- */
+.e-btn.e-primary:hover,
+.e-btn.e-primary:focus {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.e-btn.e-primary:disabled,
+.e-btn.e-primary.e-disabled {
+  background: var(--bg-hover);
+  border-color: var(--bg-hover);
+  color: var(--text-faint);
+}
+
+/* ==========================================================================
+   Editor shell
+   ========================================================================== */
+
+.app.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+}
+
+.workspace {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.viewer-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  background: var(--bg);
+}
+
+/* ==========================================================================
+   Top bar
+   ========================================================================== */
+
 .topbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px));
-  border-bottom: 1px solid var(--line);
+  gap: 14px;
+  height: var(--topbar-height);
+  padding: 0 16px;
   background: var(--bg);
-  min-width: 0;
-  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  /*
+   * The app bar sits above the editor content but below the tooltips and
+   * popups of the PDF Viewer, which are appended to the body and take their
+   * z-index from the stacking context. A small value keeps the app bar from
+   * competing with them.
+   */
+  position: relative;
+  z-index: var(--z-appbar);
 }
-.mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  border: 0;
+
+.topbar-home {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  border: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--accent) !important;
   cursor: pointer;
-  flex: none;
-  padding: 0;
 }
-.mark::after {
-  content: '';
-  width: 11px;
-  height: 14px;
-  border: 2px solid var(--accent-ink);
-  border-radius: 2px;
+
+.topbar-home:hover {
+  background: var(--bg-hover) !important;
 }
-.doc {
+
+.topbar-file {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  line-height: 1.2;
 }
-.doc b {
+
+.topbar-name {
+  font-size: 15px;
   font-weight: 700;
-  font-size: 14px;
-  white-space: nowrap;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 240px;
+  white-space: nowrap;
 }
-.doc small {
-  font-size: 11.5px;
-  color: var(--muted);
+
+.topbar-state {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
-.doc small::before {
-  content: '';
+
+.topbar-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--good);
+  background: var(--accent);
 }
-.search {
-  margin-inline: auto;
-  display: flex;
+
+.topbar-export {
+  margin-left: auto;
+  display: inline-flex !important;
   align-items: center;
   gap: 8px;
-  background: var(--surface-3);
-  border: 1px solid transparent;
-  border-radius: 10px;
-  padding: 0 10px;
-  height: 34px;
-  width: min(320px, 26vw);
-  color: var(--muted);
+  padding: 9px 16px !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--accent) !important;
+  color: var(--accent-contrast) !important;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
 }
-.search:focus-within {
-  border-color: var(--accent);
-  background: var(--surface);
+
+.topbar-export:hover {
+  background: var(--accent-strong) !important;
 }
-.search input {
-  border: 0;
-  background: none;
-  outline: none;
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  color: var(--fg);
+
+.topbar-export .e-btn-icon {
+  font-size: 15px;
 }
-.search kbd {
-  font:
-    500 10.5px ui-monospace,
-    Consolas,
-    monospace;
-  border: 1px solid var(--line-2);
-  border-radius: 5px;
-  padding: 1px 5px;
+
+/* ==========================================================================
+   Rail
+   ========================================================================== */
+
+.rail {
+  background: var(--bg-elevated);
+  flex: 0 0 auto;
 }
-.pnav {
+
+.rail-desktop {
+  width: var(--rail-width);
+  border-right: 1px solid var(--border);
+  padding: 8px 0;
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* The Syncfusion button renders the icon in a `.e-btn-icon` span followed by
+   the label as text. The icon span is forced to its own block so the icon
+   and the label stack vertically inside the column flex container. */
+.rail-item {
+  display: flex !important;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.pnav input {
-  width: 38px;
-  height: 30px;
-  border: 1px solid var(--line-2);
-  border-radius: 8px;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 10px 4px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.2;
   text-align: center;
-  background: var(--surface);
-  color: var(--fg);
-  font: inherit;
-  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
 }
-.pnav .of {
-  color: var(--muted);
+
+.rail-item:hover {
+  color: var(--text);
+  background: none;
+}
+
+.rail-item.is-active {
+  color: var(--accent);
+  background: none;
+}
+
+.rail-item .e-btn-icon {
+  display: block !important;
+  width: auto !important;
+  height: 22px;
+  margin: 0 0 6px !important;
+  font-size: 18px;
+  line-height: 22px;
+  vertical-align: baseline;
+}
+
+.rail-item .e-spacer {
+  display: none;
+}
+
+.rail-icon {
+  display: inline-flex;
+}
+
+.rail-label {
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.rail-group-start {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.rail-phone {
+  flex-direction: row;
+  height: 58px;
+  border-top: 1px solid var(--border);
   padding: 0 4px;
 }
-.pnav .zv {
-  min-width: 46px;
-  text-align: center;
-  font-weight: 600;
-}
-.acts {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.app.phone .doc {
-  flex: 1;
+
+.rail-phone .rail-item {
+  flex: 1 1 0;
+  justify-content: center;
+  padding: 6px 2px;
 }
 
-/* ---- workspace: rail (ours) + viewer ---- */
-.workspace {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  min-height: 0;
-}
-.app.phone .workspace {
-  grid-template-columns: 1fr;
-}
-.viewer-host {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-.rail {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 6px;
-  border-right: 1px solid var(--line);
-  background: var(--surface-2);
-  width: 80px;
-  overflow-y: auto;
-}
-.rail button,
-.bottom-tabs button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  border: 0;
-  background: none;
-  border-radius: 11px;
-  padding: 8px 2px;
-  cursor: pointer;
-  color: var(--muted);
-  font: 600 11px/1.15 var(--f-ui);
-  text-align: center;
-}
-.rail button:hover {
-  background: var(--surface-3);
-  color: var(--fg);
-}
-.rail button[aria-pressed='true'],
-.bottom-tabs button[aria-pressed='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.rail hr {
-  border: 0;
-  height: 1px;
-  background: var(--line);
-  margin: 6px 8px;
-}
-.bottom-tabs {
-  display: flex;
-  justify-content: space-around;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  padding: 6px 4px 8px;
-}
-.bottom-tabs button {
-  padding: 4px 10px;
-  font-size: 10.5px;
-}
-.more-sheet {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
-  z-index: 900;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: var(--shadow);
-  padding: 8px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+.rail-phone .rail-group-start {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 6px;
 }
 
-/* ---- start screen ---- */
+/* ==========================================================================
+   Start screen
+   ========================================================================== */
+
 .start {
   height: 100%;
   overflow: auto;
   background: var(--bg);
 }
+
 .start-inner {
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 40px max(20px, env(safe-area-inset-left, 0px)) 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 800;
-  font-size: 15px;
-}
-.brand .mark {
-  cursor: default;
-}
-.start h1 {
-  margin: 0;
-  font-size: clamp(24px, 4vw, 32px);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  text-wrap: balance;
-}
-.lede {
-  color: var(--muted);
-  margin: 8px 0 0;
-  font-size: 15px;
-}
-.drop {
-  border: 1.5px dashed var(--line-2);
-  border-radius: 18px;
-  padding: 36px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  text-align: center;
-  background: var(--surface-2);
-  color: var(--accent);
-}
-.drop b {
-  color: var(--fg);
-  font-size: 15px;
-}
-.drop.over {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-}
-.tile {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-  padding: 16px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
-}
-.tile:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow);
-}
-.tile-ic {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  display: grid;
-  place-items: center;
-}
-.tile b {
-  font-size: 14.5px;
-}
-.tile small {
-  color: var(--muted);
-  font-size: 12.5px;
-}
-.foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
-}
-.priv {
-  color: var(--good);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  padding: 48px 24px 40px;
 }
 
-/* ---- compare (PdfComparer) ---- */
-.compare {
-  position: absolute;
-  inset: 0;
-  z-index: 1000;
-  background: var(--bg);
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-}
-.compare-head {
+.start-brand {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  color: var(--accent);
+  margin-bottom: 34px;
 }
-.compare-head h2 {
-  margin: 0;
+
+.start-brand-name {
+  color: var(--text);
   font-size: 17px;
+  font-weight: 700;
 }
-.compare-head p {
-  margin: 2px 0 0;
-  font-size: 12.5px;
+
+.start-title {
+  margin: 0 0 8px;
+  font-size: 34px;
+  line-height: 1.18;
+  font-weight: 800;
+  letter-spacing: -0.4px;
 }
-.compare-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
+
+.start-sub {
+  margin: 0 0 28px;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+.dropzone {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  padding: 34px 24px 30px;
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone.is-dragging {
+  border-color: var(--accent);
+  background: var(--bg-panel);
+}
+
+.dropzone-upload {
+  display: inline-flex;
+  color: var(--accent);
+  margin-bottom: 10px;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.dropzone-title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dropzone-or {
+  margin: 0 0 14px;
+  color: var(--text-faint);
   font-size: 13px;
 }
-.fchip {
+
+.dropzone-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* The tiles reflow instead of squeezing, so the description always has
+   enough room and never leaves the card. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.tile {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  /* The Syncfusion button sets white-space: nowrap, which stops the
+     description from wrapping, so it is reset here. */
+  white-space: normal !important;
+  padding: 16px 14px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius);
+  background: var(--bg-panel) !important;
+  color: var(--text) !important;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tile:hover {
+  border-color: var(--border-strong) !important;
+  background: var(--bg-hover) !important;
+}
+
+.tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: rgba(45, 212, 191, 0.12);
+  color: var(--accent);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.tile-title {
+  font-size: 15px;
+  font-weight: 700;
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+.tile-desc {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  /* Long descriptions break onto a second line and stay inside the tile. */
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.continue {
+  margin-top: 20px;
+  padding: 10px 16px !important;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: var(--radius-sm) !important;
+  background: transparent !important;
+  color: var(--accent) !important;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none !important;
+}
+
+.start-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.start-trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent);
+}
+
+.start-trust .e-icons {
+  font-size: 14px;
+}
+
+.start-credit {
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Overlays
+   ========================================================================== */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: var(--bg);
+}
+
+.start-overlay {
+  overflow: auto;
+}
+
+/* ==========================================================================
+   Compare
+   ========================================================================== */
+
+.compare-overlay {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /*
+   * The overlay uses the regular overlay level. The tooltips and popups of
+   * the PDF Viewer take their z-index from the stacking context of the page,
+   * so they stay above this overlay as well.
+   */
+  z-index: var(--z-overlay);
+}
+
+.compare-setup {
+  margin: 0 auto;
+  padding: 26px 24px 40px;
+  width: 100%;
+  max-width: 1024px;
+  overflow: auto;
+}
+
+.compare-heading {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.compare-sub {
+  margin: 0 0 26px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.compare-slots {
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr;
+  align-items: center;
+  gap: 0;
+}
+
+.compare-slot {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 22px 20px;
+  text-align: center;
+}
+
+.compare-slot.is-dragging {
+  border-color: var(--accent);
+}
+
+.compare-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.compare-badge-original {
+  background: rgba(248, 113, 113, 0.16);
+  color: var(--danger);
+}
+
+.compare-badge-modified {
+  background: rgba(74, 222, 128, 0.16);
+  color: var(--success);
+}
+
+.compare-upload {
+  display: inline-flex;
+  color: var(--accent);
+  margin-bottom: 8px;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.compare-slot-title {
+  margin: 0 0 12px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.compare-file-name {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-slot-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compare-swap {
+  justify-self: center;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: 50% !important;
+  background: var(--bg-panel) !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.compare-swap .e-btn-icon {
+  font-size: 16px;
+}
+
+.compare-swap:hover:not(:disabled) {
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+.compare-swap:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.compare-go {
+  display: flex !important;
+  margin: 26px auto 0;
+}
+
+.compare-sample {
+  margin: 20px 0 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.compare-sample-link {
+  padding: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--accent) !important;
+  text-decoration: underline;
+}
+
+.compare-sample-link:hover {
+  color: var(--accent-strong) !important;
+}
+
+.compare-setup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.compare-close {
+  flex: 0 0 auto;
+  background: none !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+}
+
+.compare-close:hover {
+  color: var(--text) !important;
+  background: var(--bg-hover) !important;
+}
+
+.compare-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--line-2);
-  background: var(--surface);
-  border-radius: 10px;
-  padding: 5px 10px;
-  max-width: 280px;
-  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-muted);
 }
-.fchip b {
-  white-space: nowrap;
+
+.compare-result {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-.tag {
-  font:
-    700 10.5px ui-monospace,
-    Consolas,
-    monospace;
-  padding: 2px 7px;
+
+/* The PdfComparer fills the remaining space inside .compare-result. */
+#pdf-comparer {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+}
+
+#pdf-comparer .e-pv-main-container,
+#pdf-comparer .e-pv-viewer-main-container,
+#pdf-comparer .e-pv-viewer-container {
+  height: 100% !important;
+}
+
+.compare-result-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  /* Same stacking level as the app bar, so it never hides a viewer popup. */
+  position: relative;
+  z-index: var(--z-appbar);
+}
+
+.compare-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compare-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
 }
-.tag.old {
-  background: rgb(239 68 68 / 0.14);
-  color: #dc2626;
+
+.compare-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
-.tag.new {
-  background: rgb(34 197 94 / 0.16);
-  color: #15803d;
-}
+
 .toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: var(--muted);
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text-muted);
   cursor: pointer;
 }
-.toggle input {
-  accent-color: var(--accent);
+
+/* ==========================================================================
+   Phone "More" sheet
+   ========================================================================== */
+
+.more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-overlay) - 1);
+  background: rgba(0, 0, 0, 0.5);
 }
-.compare-host {
-  min-height: 0;
+
+.more-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
 }
-.app.phone .compare-head p {
-  display: none;
+
+.more-item {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 10px !important;
+  border: none !important;
+  border-radius: var(--radius-sm);
+  background: none !important;
+  color: var(--text) !important;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none !important;
 }
+
+.more-item:hover {
+  background: var(--bg-hover) !important;
+}
+
+.more-item .e-btn-icon {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+/* ==========================================================================
+   Toast
+   ========================================================================== */
 
 .toast {
-  position: absolute;
-  bottom: 84px;
+  position: fixed;
   left: 50%;
+  bottom: 28px;
   transform: translateX(-50%);
-  background: var(--fg);
-  color: var(--bg);
-  padding: 9px 15px;
-  border-radius: 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  z-index: 1100;
-  box-shadow: var(--shadow);
-  max-width: 90%;
-}
-
-@media (max-width: 1024px) {
-  .search {
-    width: 180px;
-  }
-  .doc small {
-    display: none;
-  }
-}
-@media (max-width: 860px) {
-  .search {
-    display: none;
-  }
-}
-
-/* ---- overlays ---- */
-.start-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1000;
-}
-.continue {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-radius: 10px;
-  padding: 8px 12px;
-  cursor: pointer;
+  z-index: var(--z-toast);
+  max-width: min(90vw, 520px);
+  padding: 11px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
   font-size: 13.5px;
-}
-.continue b {
-  font-weight: 700;
-}
-.sheet-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 899;
-}
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.btn.big {
-  height: 42px;
-  padding: 0 22px;
-  font-size: 14px;
-}
-.link {
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-}
-.center {
-  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
-/* ---- compare: choose two documents ---- */
-.compare-setup {
-  overflow: auto;
-  padding: 28px max(16px, env(safe-area-inset-left, 0px));
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  max-width: 960px;
-  width: 100%;
-  margin: 0 auto;
-}
-.slots {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 14px;
-  align-items: center;
-}
-.slot {
-  border: 1.5px dashed var(--line-2);
-  border-radius: 16px;
-  background: var(--surface-2);
-  min-height: 220px;
-  padding: 20px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  text-align: center;
-  color: var(--accent);
-  min-width: 0;
-}
-.slot .muted {
-  font-size: 13px;
-}
-.slot.over {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.slot.filled {
-  border-style: solid;
-  background: var(--surface);
-}
-.slot-name {
-  color: var(--fg);
-  font-size: 15px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ib.swap:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-@media (max-width: 720px) {
-  .slots {
+/* ==========================================================================
+   Phone layout
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .start-inner {
+    padding: 28px 16px 32px;
+  }
+
+  .start-title {
+    font-size: 26px;
+  }
+
+  .compare-slots {
     grid-template-columns: 1fr;
   }
-  .ib.swap {
-    justify-self: center;
+
+  .compare-swap {
+    margin: 10px auto;
     transform: rotate(90deg);
   }
-  .slot {
-    min-height: 160px;
+
+  .compare-result-bar {
+    gap: 10px;
   }
+
+  .compare-result-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .topbar-export span {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   Syncfusion viewer overrides
+
+   The colours come from the app tokens so the viewer follows the operating
+   system colour scheme together with the rest of the app.
+   ========================================================================== */
+
+.e-pdf-viewer {
+  border: none;
+}
+
+.e-pv-toolbar {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.e-pv-content {
+  background: var(--bg);
+}
+
+.e-pv-secondary-toolbar {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.e-pv-navigation-pane {
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+}
+
+.e-pv-page-organizer-dialog {
+  background: var(--bg-panel);
+}
+
+.e-toast {
+  background: var(--bg-panel);
+  color: var(--text);
 }

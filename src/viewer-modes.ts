@@ -1,97 +1,204 @@
-// Thin wrappers around the Syncfusion PDF Viewer APIs that our own UI calls.
-// The viewer's built-in main toolbar is hidden; its feature toolbars
-// (annotation, form designer, redaction) are opened from our left rail.
 import type { PdfViewerComponent } from '@syncfusion/ej2-react-pdfviewer';
-import { Browser } from '@syncfusion/ej2-base';
 
+/** The feature toolbar that is currently open. Only one at a time. */
 export type EditMode = 'view' | 'annotate' | 'sign' | 'redact';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const tb = (v: PdfViewerComponent): any => (v as any).toolbarModule ?? (v as any).toolbar;
+/** Toolbar item names accepted by `toolbar.showToolbarItem`. */
+export type ToolbarItemList = string[];
 
-function annotationHidden(v: PdfViewerComponent): boolean {
-  return tb(v)?.annotationToolbarModule?.isToolbarHidden ?? true;
-}
-function formDesignerHidden(v: PdfViewerComponent): boolean {
-  return tb(v)?.formDesignerToolbarModule?.isToolbarHidden ?? true;
-}
-function redactionHidden(v: PdfViewerComponent): boolean {
-  return tb(v)?.redactionToolbarModule?.isToolbarHidden ?? true;
+interface FormDesignerToolbarModule {
+  showFormDesignerToolbar(element?: HTMLElement | null, isInitialLoading?: boolean): void;
+  resetFormDesignerToolbar(): void;
+  isToolbarHidden: boolean;
+  toolbarElement: HTMLElement;
 }
 
-export type ToolbarItemList = Parameters<PdfViewerComponent['toolbar']['showToolbarItem']>[0];
-
-/** Hides main-toolbar items that our own UI already provides (rail and Export). */
-export function hideToolbarItems(v: PdfViewerComponent, items: ToolbarItemList) {
-  tb(v)?.showToolbarItem(items, false);
+interface AnnotationToolbarModule {
+  showAnnotationToolbar(element?: HTMLElement | null, isInitialLoading?: boolean, isShow?: boolean): void;
+  isToolbarHidden: boolean;
+  toolbarElement: HTMLElement;
 }
 
-/** Opens exactly one feature toolbar (or none for 'view'). */
-export function applyMode(v: PdfViewerComponent, mode: EditMode) {
-  const t = tb(v);
-  if (!t) return;
-  if (mode !== 'annotate' && !annotationHidden(v)) t.showAnnotationToolbar(false);
-  if (mode !== 'redact' && !redactionHidden(v)) t.showRedactionToolbar(false);
-  if (mode !== 'sign' && !formDesignerHidden(v)) t.formDesignerToolbarModule.showFormDesignerToolbar(null, false);
-
-  if (mode === 'annotate' && annotationHidden(v)) t.showAnnotationToolbar(true);
-  if (mode === 'redact' && redactionHidden(v)) t.showRedactionToolbar(true);
-  if (mode === 'sign' && formDesignerHidden(v)) t.formDesignerToolbarModule.showFormDesignerToolbar(null, false);
+interface RedactionToolbarModule {
+  showRedactionToolbar(element?: HTMLElement | null, isInitialLoading?: boolean, isShow?: boolean): void;
+  isToolbarHidden: boolean;
+  toolbarElement: HTMLElement;
 }
 
-/** Reads which feature toolbar is open, so our rail follows the viewer's own close (X) button. */
-export function currentMode(v: PdfViewerComponent): EditMode {
-  if (!annotationHidden(v)) return 'annotate';
-  if (!formDesignerHidden(v)) return 'sign';
-  if (!redactionHidden(v)) return 'redact';
-  return 'view';
+export interface ViewerHandle {
+  isAnnotationToolbarVisible: boolean;
+  isFormDesignerToolbarVisible: boolean;
+  isRedactionToolbarVisible: boolean;
+  toolbar: {
+    showAnnotationToolbar(visible: boolean): void;
+    showRedactionToolbar(visible: boolean): void;
+    showToolbarItem(items: ToolbarItemList, isVisible: boolean): void;
+  };
+  toolbarModule: {
+    formDesignerToolbarModule: FormDesignerToolbarModule;
+    annotationToolbarModule: AnnotationToolbarModule;
+    redactionToolbarModule: RedactionToolbarModule;
+  };
+  annotationModule: {
+    showCommentsPanel(): void;
+  };
+  pageOrganizer: {
+    openPageOrganizer(): void;
+    closePageOrganizer(): void;
+    isOrganizeWindowOpen: boolean;
+  };
+  viewerBase: {
+    navigationPane: {
+      openThumbnailPane(): void;
+      closeThumbnailPane(): void;
+      isThumbnailOpen: boolean;
+      closeCommentPanelContainer(): void;
+    };
+  };
 }
 
-export function toggleThumbnails(v: PdfViewerComponent, open: boolean) {
-  const m = (v as any).thumbnailViewModule;
-  if (!m) return;
-  if (open) m.openThumbnailPane();
-  else m.closeThumbnailPane();
+type Viewer = PdfViewerComponent & ViewerHandle;
+
+const TOOLBAR_ITEMS_TO_HIDE: ToolbarItemList = [
+  'AnnotationEditTool',
+  'FormDesignerEditTool',
+  'RedactionEditTool',
+  'OrganizePagesTool',
+  'DownloadOption'
+];
+
+/** Hides the toolbar entries that the app drives from its own rail. */
+export function hideAppControlledToolbarItems(viewer: Viewer | null): void {
+  viewer?.toolbar.showToolbarItem(TOOLBAR_ITEMS_TO_HIDE, false);
 }
 
-/** Opens or closes the viewer's own comment panel. */
-export function setComments(v: PdfViewerComponent, open: boolean) {
-  if (open) (v as any).annotationModule?.showCommentsPanel();
-  else (v as any).isCommandPanelOpen = false;
+/** Closes the page organizer and the comments panel. */
+export function closeOverlays(viewer: Viewer | null): void {
+  if (!viewer) {
+    return;
+  }
+
+  if (viewer.pageOrganizer?.isOrganizeWindowOpen) {
+    viewer.pageOrganizer.closePageOrganizer();
+  }
+
+  viewer.viewerBase?.navigationPane?.closeCommentPanelContainer();
 }
 
-/** True while the viewer's thumbnail pane is open (also after the pane's own close button). */
-export function thumbnailsOpen(v: PdfViewerComponent): boolean {
-  return !!(v as any).viewerBase?.navigationPane?.isThumbnailOpen;
-}
+/** Closes every feature toolbar. Used by the "View" rail item. */
+export function closeFeatureToolbars(viewer: Viewer | null): void {
+  if (!viewer) {
+    return;
+  }
 
-/** Closes Organize Pages (and optionally the comment panel) before switching to another feature. */
-export function closeOverlays(v: PdfViewerComponent, alsoComments = false) {
-  const org = organizer(v);
-  if (org?.isOrganizeWindowOpen) org.closePageOrganizer();
-  if (alsoComments && (v as any).isCommandPanelOpen) (v as any).isCommandPanelOpen = false;
-}
+  viewer.toolbar.showAnnotationToolbar(false);
+  viewer.toolbar.showRedactionToolbar(false);
 
-const organizer = (v: PdfViewerComponent): any => (v as any).pageOrganizerModule ?? (v as any).pageOrganizer;
+  const modules = viewer.toolbarModule;
+
+  const annotation = modules?.annotationToolbarModule;
+  if (annotation && viewer.isAnnotationToolbarVisible) {
+    // The toggle only hides the toolbar when its own flag allows it, so the
+    // element is hidden directly here as well.
+    annotation.toolbarElement.style.display = 'none';
+    annotation.isToolbarHidden = false;
+    viewer.isAnnotationToolbarVisible = false;
+  }
+
+  const redaction = modules?.redactionToolbarModule;
+  if (redaction && viewer.isRedactionToolbarVisible) {
+    redaction.toolbarElement.style.display = 'none';
+    redaction.isToolbarHidden = false;
+    viewer.isRedactionToolbarVisible = false;
+  }
+
+  const formDesigner = modules?.formDesignerToolbarModule;
+  if (formDesigner && viewer.isFormDesignerToolbarVisible) {
+    formDesigner.toolbarElement.style.display = 'none';
+    formDesigner.isToolbarHidden = true;
+    viewer.isFormDesignerToolbarVisible = false;
+  }
+}
 
 /**
- * Opens Organize Pages. On phones and tablets (iOS, Android) it uses the viewer's
- * own mobile layout: compact icon toolbar, "⋮" menu with Save / Save As, touch tiles.
- * The app keeps enableDesktopMode on for the editor toolbars, which would otherwise
- * squeeze the desktop organizer onto a small screen, so it is switched off only while
- * the organizer is open. `onClosed` runs when the user closes it.
+ * Opens the toolbar that matches the mode and closes the others (N2).
+ * The "view" mode closes every feature toolbar.
  */
-export function openOrganizer(v: PdfViewerComponent, onClosed?: () => void) {
-  const org = organizer(v);
-  if (!org) return;
-  const mobile = Browser.isDevice && (v as any).enableDesktopMode;
-  if (mobile) (v as any).setProperties({ enableDesktopMode: false }, true);
-  org.openPageOrganizer();
-  const watch = setInterval(() => {
-    if (org.isOrganizeWindowOpen) return;
-    clearInterval(watch);
-    if (mobile) (v as any).setProperties({ enableDesktopMode: true }, true);
-    onClosed?.();
-  }, 300);
+export function applyMode(viewer: Viewer | null, mode: EditMode): void {
+  if (!viewer) {
+    return;
+  }
+
+  closeFeatureToolbars(viewer);
+
+  switch (mode) {
+    case 'annotate':
+      viewer.toolbar.showAnnotationToolbar(true);
+      break;
+    case 'redact':
+      viewer.toolbar.showRedactionToolbar(true);
+      break;
+    case 'sign': {
+      const formDesigner = viewer.toolbarModule?.formDesignerToolbarModule;
+      if (formDesigner) {
+        formDesigner.isToolbarHidden = true;
+        formDesigner.showFormDesignerToolbar(null, false);
+      }
+      break;
+    }
+    case 'view':
+      break;
+  }
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+
+/** Opens the page organizer dialog. */
+export function openOrganizer(viewer: Viewer | null): void {
+  viewer?.pageOrganizer.openPageOrganizer();
+}
+
+export function closeOrganizer(viewer: Viewer | null): void {
+  if (viewer?.pageOrganizer?.isOrganizeWindowOpen) {
+    viewer.pageOrganizer.closePageOrganizer();
+  }
+}
+
+/** Toggles the thumbnail pane and reports the state the viewer ended up in. */
+export function toggleThumbnails(viewer: Viewer | null): boolean {
+  if (!viewer) {
+    return false;
+  }
+
+  const pane = viewer.viewerBase?.navigationPane;
+  if (!pane) {
+    return false;
+  }
+
+  if (pane.isThumbnailOpen) {
+    pane.closeThumbnailPane();
+    return false;
+  }
+
+  pane.openThumbnailPane();
+  return true;
+}
+
+/** Reads the toolbar state back from the viewer, used to keep the rail in sync (N3). */
+export function currentMode(viewer: Viewer | null): EditMode {
+  if (!viewer) {
+    return 'view';
+  }
+
+  if (viewer.isAnnotationToolbarVisible) {
+    return 'annotate';
+  }
+
+  if (viewer.isRedactionToolbarVisible) {
+    return 'redact';
+  }
+
+  if (viewer.isFormDesignerToolbarVisible) {
+    return 'sign';
+  }
+
+  return 'view';
+}

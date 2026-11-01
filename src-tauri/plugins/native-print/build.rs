@@ -1,4 +1,4 @@
-const COMMANDS: &[&str] = &["print_pdf", "is_supported", "save_file", "features"];
+const COMMANDS: &[&str] = &["features", "is_supported", "print_pdf", "save_file"];
 
 fn main() {
     tauri_plugin::Builder::new(COMMANDS)

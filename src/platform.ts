@@ -1,29 +1,112 @@
-import { isTauri } from '@tauri-apps/api/core';
-
 export type AppPlatform = 'web' | 'desktop' | 'android' | 'ios';
 
-/** True when running inside the Tauri shell (desktop or mobile). */
-export const inTauri = isTauri();
+const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
 
-export function getPlatform(): AppPlatform {
-  if (!inTauri) return 'web';
-  const ua = navigator.userAgent;
-  if (/Android/i.test(ua)) return 'android';
-  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+/** True when running inside a Tauri shell (desktop or mobile). */
+export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+function detectPlatform(): AppPlatform {
+  if (!inTauri) {
+    return 'web';
+  }
+
+  if (/android/i.test(ua)) {
+    return 'android';
+  }
+
+  // iPadOS reports a desktop Mac UA, so it is detected through the touch-capable
+  // platform hints that Safari exposes instead.
+  const isIpadOs =
+    /iPad/i.test(ua) ||
+    (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1);
+
+  if (isIpadOs) {
+    return 'ios';
+  }
+
+  if (/iPhone|iPod/i.test(ua)) {
+    return 'ios';
+  }
+
   return 'desktop';
 }
 
-export const platformLabel: Record<AppPlatform, string> = {
-  web: 'Web',
-  desktop: 'Desktop',
-  android: 'Android',
-  ios: 'iOS',
-};
+export const currentPlatform: AppPlatform = detectPlatform();
+
+export function getPlatform(): AppPlatform {
+  return currentPlatform;
+}
+
+export function isPhone(): boolean {
+  return typeof window !== 'undefined' && window.innerWidth <= 640;
+}
 
 /**
- * Absolute URL of the bundled PDFium engine. Built from document.baseURI so it
- * resolves on http(s):// (web and dev server), tauri://localhost (macOS, iOS,
- * Linux) and http://tauri.localhost (Windows, Android).
+ * Folder that holds pdfium.js and pdfium.wasm.
+ *
+ * The viewer loads these files from a web worker, so the URL has to be
+ * absolute. It must not end with a slash, because the viewer appends
+ * "/pdfium.js" to it.
  */
-export const viewerResourceUrl = new URL('ej2-pdfviewer-lib', document.baseURI).href;
-export const sampleDocumentUrl = new URL('sample.pdf', document.baseURI).href;
+export const viewerResourceUrl = `${window.location.origin}/ej2-pdfviewer-lib`;
+
+export const sampleDocumentUrl = '/sample.pdf';
+export const sampleDocumentUrlV2 = '/sample-v2.pdf';
+
+/* -------------------------------------------------------------------------
+   Adaptive theming
+   -------------------------------------------------------------------------
+   The app follows the operating system colour scheme. The Syncfusion
+   components read their colours from CSS variables that are defined twice:
+   once for the light values on `:root` and once for the dark values on
+   `.e-dark-mode`. Adding or removing that class on `<body>` therefore
+   switches every Syncfusion component and the app tokens at the same time.
+   ------------------------------------------------------------------------- */
+
+const DARK_CLASS = 'e-dark-mode';
+
+let colorSchemeQuery: MediaQueryList | null = null;
+let colorSchemeListenerAttached = false;
+
+/** Applies the given colour scheme to the document body. */
+export function applyColorScheme(isDark: boolean): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  document.body.classList.toggle(DARK_CLASS, isDark);
+}
+
+/** Starts following the operating system colour scheme. */
+export function watchColorScheme(): void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return;
+  }
+
+  colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  applyColorScheme(colorSchemeQuery.matches);
+
+  if (!colorSchemeListenerAttached) {
+    colorSchemeListenerAttached = true;
+
+    const onChange = (event: MediaQueryListEvent) => {
+      applyColorScheme(event.matches);
+    };
+
+    if (typeof colorSchemeQuery.addEventListener === 'function') {
+      colorSchemeQuery.addEventListener('change', onChange);
+    } else if (typeof colorSchemeQuery.addListener === 'function') {
+      // Safari below version 14.
+      colorSchemeQuery.addListener(onChange);
+    }
+  }
+}
+
+/** True when the dark colour scheme is currently applied. */
+export function isDarkMode(): boolean {
+  if (typeof document === 'undefined') {
+    return false;
+  }
+
+  return document.body.classList.contains(DARK_CLASS);
+}

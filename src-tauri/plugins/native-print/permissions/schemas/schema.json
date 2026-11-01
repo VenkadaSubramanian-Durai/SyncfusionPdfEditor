@@ -343,10 +343,10 @@
           "markdownDescription": "Denies the save_file command without any pre-configured scope."
         },
         {
-          "description": "Lets the app print a PDF with the operating system's print screen, and save files with the iOS export sheet.\n#### This default permission set includes:\n\n- `allow-print-pdf`\n- `allow-is-supported`\n- `allow-save-file`\n- `allow-features`",
+          "description": "Allows the app to report platform features, print PDFs and save files.\n#### This default permission set includes:\n\n- `allow-features`\n- `allow-is-supported`\n- `allow-print-pdf`\n- `allow-save-file`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Lets the app print a PDF with the operating system's print screen, and save files with the iOS export sheet.\n#### This default permission set includes:\n\n- `allow-print-pdf`\n- `allow-is-supported`\n- `allow-save-file`\n- `allow-features`"
+          "markdownDescription": "Allows the app to report platform features, print PDFs and save files.\n#### This default permission set includes:\n\n- `allow-features`\n- `allow-is-supported`\n- `allow-print-pdf`\n- `allow-save-file`"
         }
       ]
     }

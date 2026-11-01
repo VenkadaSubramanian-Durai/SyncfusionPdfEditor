@@ -1,105 +1,114 @@
-// Bridge to the Tauri shell. Every function is a no-op in a normal browser,
-// so the same build also runs as a plain web app.
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
-import { inTauri } from './platform';
+import { getPlatform, inTauri } from './platform';
 
+/** A file handed over by the operating system. */
 export interface OpenedFile {
   name: string;
   base64: string;
 }
 
-/** PDF the app was launched with (double-click / "Open with" on Windows and Linux). */
-export async function takeStartupFile(): Promise<OpenedFile | null> {
-  if (!inTauri) return null;
-  try {
-    return await invoke<OpenedFile | null>('take_startup_file');
-  } catch (error) {
-    console.error('[native] Could not read the startup file', error);
-    return null;
-  }
-}
-
-/** PDFs the OS hands over while the app is running (macOS / iOS "Open with"). */
-export function onOpenFile(callback: (file: OpenedFile) => void): () => void {
-  if (!inTauri) return () => {};
-  const stop = listen<OpenedFile>('open-file', (event) => callback(event.payload));
-  return () => {
-    void stop.then((unlisten) => unlisten());
-  };
-}
-
-/**
- * Saves a file the user names and places. Returns false when the user cancels.
- * - Windows, macOS, Linux, Android: Save As dialog (dialog plugin), then write (fs plugin).
- * - iOS: the "Save to Files" sheet (native-print plugin). The dialog plugin's Save As
- *   on iOS only returns a location the app can't write to afterwards.
- */
-export async function saveFile(
-  data: Blob | Uint8Array,
-  fileName: string,
-  filter: { name: string; extensions: string[] },
-): Promise<boolean> {
-  const bytes = data instanceof Uint8Array ? data : new Uint8Array(await data.arrayBuffer());
-  if ((await nativeFeatures).saveFile) {
-    console.info(`[native] save_file ${fileName} (${bytes.length} bytes)`);
-    return invoke<boolean>('plugin:native-print|save_file', { name: fileName, data: toBase64(bytes) });
-  }
-  const path = await save({ defaultPath: fileName, filters: [filter] });
-  if (!path) return false;
-  await writeFile(path, bytes);
-  return true;
-}
-
-/** Saves the edited PDF (see saveFile). */
-export async function savePdf(blob: Blob, fileName: string): Promise<boolean> {
-  const name = fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
-  return saveFile(blob, name, { name: 'PDF document', extensions: ['pdf'] });
-}
-
-// ---- Printing ----
-// The PDF Viewer prints with window.print(). Windows (WebView2) and Linux (WebKitGTK)
-// show a print screen for that; the WebViews on macOS, iOS and Android do not.
-// On those platforms the edited PDF goes to the native-print plugin instead, which
-// opens the operating system's own print screen.
-
-interface NativeFeatures {
+/** Capabilities reported by the native print plugin. */
+export interface NativeFeatures {
   print: boolean;
   saveFile: boolean;
 }
-let nativePrint = false;
-/** What the native-print plugin handles on this platform (for diagnostics). */
-export const nativeFeaturesReady = () => nativeFeatures;
-const nativeFeatures: Promise<NativeFeatures> = inTauri
-  ? invoke<NativeFeatures>('plugin:native-print|features').catch((error) => {
-      console.error('[native] Could not check native printing', error);
-      return { print: false, saveFile: false };
-    })
-  : Promise.resolve({ print: false, saveFile: false });
-void nativeFeatures.then((f) => (nativePrint = f.print));
 
-/** True when Print must go through the operating system (macOS, iOS, Android). */
-export function usesNativePrint(): boolean {
-  return nativePrint;
+const NATIVE_PRINT_PLUGIN = 'native-print';
+
+async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return invoke<T>(`plugin:${NATIVE_PRINT_PLUGIN}|${command}`, args);
+}
+
+export async function takeStartupFile(): Promise<OpenedFile | null> {
+  if (!inTauri) {
+    return null;
+  }
+
+  return invoke<OpenedFile | null>('take_startup_file');
+}
+
+export function onOpenFile(handler: (file: OpenedFile) => void): () => void {
+  if (!inTauri) {
+    return () => undefined;
+  }
+
+  let dispose: () => void = () => undefined;
+  let cancelled = false;
+
+  void listen<OpenedFile>('open-file', (event) => {
+    handler(event.payload);
+  }).then((unlisten) => {
+    if (cancelled) {
+      unlisten();
+    } else {
+      dispose = unlisten;
+    }
+  });
+
+  return () => {
+    cancelled = true;
+    dispose();
+  };
+}
+
+export async function getNativeFeatures(): Promise<NativeFeatures> {
+  if (!inTauri) {
+    return { print: false, saveFile: false };
+  }
+
+  try {
+    return await call<NativeFeatures>('features');
+  } catch {
+    return { print: false, saveFile: false };
+  }
+}
+
+export async function isNativePrintSupported(): Promise<boolean> {
+  if (!inTauri) {
+    return false;
+  }
+
+  try {
+    return await call<boolean>('is_supported');
+  } catch {
+    return false;
+  }
+}
+
+export async function printPdf(name: string, data: string): Promise<boolean> {
+  return call<boolean>('print_pdf', { name, data });
 }
 
 /**
- * Opens the native print screen for the PDF. Resolves true when it was printed
- * (on Android: when the print screen was opened), false when the user cancelled.
+ * Saves the given bytes through the platform's own save flow.
+ *
+ * iOS uses the plugin's "Save to Files" sheet. Every other platform shows the
+ * Tauri save dialog and writes the file with the fs plugin.
  */
-export async function printPdf(blob: Blob, fileName: string): Promise<boolean> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  return invoke<boolean>('plugin:native-print|print_pdf', {
-    name: fileName || 'document.pdf',
-    data: toBase64(bytes),
-  });
-}
+export async function saveFile(name: string, base64: string): Promise<string | null> {
+  if (!inTauri) {
+    return null;
+  }
 
-/** Bytes travel to the plugin as base64 in JSON: Android's IPC has no raw request bodies. */
-function toBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
+  if (getPlatform() === 'ios') {
+    const saved = await call<boolean>('save_file', { name, data: base64 });
+    return saved ? name : null;
+  }
+
+  const path = await save({
+    defaultPath: name,
+    filters: [{ name, extensions: [name.split('.').pop() ?? 'pdf'] }]
+  });
+
+  if (!path) {
+    return null;
+  }
+
+  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  await writeFile(path, bytes);
+
+  return path;
 }

@@ -1,220 +1,331 @@
-import { useRef, useState } from 'react';
-import { PdfComparerComponent, type TextComparisonOptions } from '@syncfusion/ej2-react-pdfviewer';
-import { Icon } from './icons';
+import { useCallback, useRef, useState } from 'react';
+import { ButtonComponent, SwitchComponent, type ChangeEventArgs } from '@syncfusion/ej2-react-buttons';
+import {
+  Inject,
+  Magnification,
+  Navigation,
+  PdfComparerComponent,
+  TextSelection,
+  type TextComparisonOptions
+} from '@syncfusion/ej2-react-pdfviewer';
+import { sampleDocumentUrl, sampleDocumentUrlV2, viewerResourceUrl } from '../platform';
 
+/** A document held in memory as base64. Used for every open document. */
 export interface DocFile {
   name: string;
   base64: string;
 }
 
-interface Props {
-  /** The PDF open in the editor, offered as a one-click choice for the original. */
+export type CompareSlot = 'original' | 'modified';
+
+interface CompareViewProps {
+  /** The document currently open in the editor, if any. */
   openDocument: DocFile | null;
-  resourceUrl: string;
-  /** Loads the bundled sample pair (sample.pdf and sample-v2.pdf) for a quick demo. */
-  loadSamplePair: () => Promise<[DocFile, DocFile]>;
   onClose: () => void;
+  onToast: (message: string) => void;
 }
 
-const readAsBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
+function baseName(name: string): string {
+  return name.replace(/\.[^/.]+$/, '');
+}
 
-const options = {
-  beforeColor: '#ef4444',
-  afterColor: '#22c55e',
-  beforeColorOpacity: 0.35,
-  afterColorOpacity: 0.35,
-  enableHighlights: true,
-} as TextComparisonOptions;
+async function fileToDocFile(file: File): Promise<DocFile> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return { name: file.name, base64: btoa(binary) };
+}
 
-/** One document slot on the setup step: drop a PDF, choose one, or use the open document. */
-function Slot(props: {
-  kind: 'old' | 'new';
+async function fetchToDocFile(url: string, name: string): Promise<DocFile> {
+  const response = await fetch(url);
+  const buffer = await response.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return { name, base64: btoa(binary) };
+}
+
+function Slot({
+  slot,
+  title,
+  badge,
+  file,
+  onFile,
+  onRemove,
+  extraAction
+}: {
+  slot: CompareSlot;
   title: string;
-  hint: string;
+  badge: string;
   file: DocFile | null;
-  openDocument?: DocFile | null;
-  onChange: (f: DocFile | null) => void;
+  onFile: (file: File) => void;
+  onRemove: () => void;
+  extraAction?: React.ReactNode;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [over, setOver] = useState(false);
-  const take = async (f: File | undefined) => {
-    if (f) props.onChange({ name: f.name, base64: await readAsBase64(f) });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    setDragging(false);
+    const dropped = event.dataTransfer.files?.[0];
+    if (dropped) {
+      onFile(dropped);
+    }
   };
+
   return (
     <div
-      className={`slot${over ? ' over' : ''}${props.file ? ' filled' : ''}`}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setOver(true);
+      className={`compare-slot${dragging ? ' is-dragging' : ''}${file ? ' has-file' : ''}`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
       }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        void take(e.dataTransfer.files[0]);
-      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
     >
-      <span className={`tag ${props.kind}`}>{props.title}</span>
-      {props.file ? (
+      <span className={`compare-badge compare-badge-${slot}`}>{badge}</span>
+
+      {file ? (
         <>
-          <b className="slot-name" title={props.file.name}>
-            {props.file.name}
-          </b>
-          <button className="btn" onClick={() => props.onChange(null)}>
-            Remove
-          </button>
+          <span className="compare-slot-title">{title}</span>
+          <p className="compare-file-name" title={file.name}>
+            {file.name}
+          </p>
+          <div className="compare-slot-actions">
+            <ButtonComponent
+              cssClass="e-primary"
+              iconCss="e-icons e-folder-open"
+              content="Choose PDF"
+              onClick={() => inputRef.current?.click()}
+            />
+            <ButtonComponent
+              cssClass="e-flat"
+              iconCss="e-icons e-close"
+              content="Remove"
+              onClick={onRemove}
+            />
+          </div>
         </>
       ) : (
         <>
-          <Icon name="upload" size={32} />
-          <span className="muted">{props.hint}</span>
-          <div className="row">
-            <button className="btn primary" onClick={() => input.current?.click()}>
-              <Icon name="open" />
-              Choose PDF
-            </button>
-            {props.openDocument && (
-              <button className="btn" onClick={() => props.onChange(props.openDocument!)}>
-                Use the open document
-              </button>
-            )}
+          <span className="compare-upload">
+            <i className="e-icons e-upload-1" />
+          </span>
+          <p className="compare-slot-title">Drop the {slot} PDF here</p>
+          <div className="compare-slot-actions">
+            <ButtonComponent
+              cssClass="e-primary"
+              iconCss="e-icons e-folder-open"
+              content="Choose PDF"
+              onClick={() => inputRef.current?.click()}
+            />
+            {extraAction}
           </div>
         </>
       )}
+
       <input
-        ref={input}
+        ref={inputRef}
         type="file"
-        accept="application/pdf,.pdf"
-        hidden
-        onChange={(e) => {
-          void take(e.target.files?.[0]);
-          e.target.value = '';
+        accept=".pdf,application/pdf"
+        className="visually-hidden"
+        onChange={(event) => {
+          const selected = event.target.files?.[0];
+          if (selected) {
+            onFile(selected);
+          }
+          event.target.value = '';
         }}
       />
     </div>
   );
 }
 
-/**
- * Compare two PDFs with the Syncfusion PdfComparer (semantic text comparison).
- * Step 1: choose the original and the modified PDF. Step 2: side-by-side result
- * with the built-in difference panel and synced scrolling. Runs on the device.
- */
-export function CompareView({ openDocument, resourceUrl, loadSamplePair, onClose }: Props) {
+export function CompareView({ openDocument, onClose, onToast }: CompareViewProps) {
   const [original, setOriginal] = useState<DocFile | null>(null);
   const [modified, setModified] = useState<DocFile | null>(null);
-  const [running, setRunning] = useState(false);
-  const [sync, setSync] = useState(true);
+  const [comparing, setComparing] = useState(false);
+  const [syncScrolling, setSyncScrolling] = useState(true);
 
-  const ready = !!original && !!modified;
+  // The comparer reads the options as plain properties, so a literal is used
+  // here instead of the TextComparisonOptions class.
+  const comparisonOptions = {
+    beforeColor: 'red',
+    afterColor: 'green',
+    beforeColorOpacity: 0.35,
+    afterColorOpacity: 0.35,
+    enableHighlights: true
+  } as unknown as TextComparisonOptions;
+
+  const handleFile = useCallback(
+    async (slot: CompareSlot, file: File) => {
+      try {
+        const doc = await fileToDocFile(file);
+        if (slot === 'original') {
+          setOriginal(doc);
+        } else {
+          setModified(doc);
+        }
+      } catch {
+        onToast('Could not read that file');
+      }
+    },
+    [onToast]
+  );
+
+  const useSamplePair = useCallback(async () => {
+    try {
+      const [first, second] = await Promise.all([
+        fetchToDocFile(sampleDocumentUrl, 'sample.pdf'),
+        fetchToDocFile(sampleDocumentUrlV2, 'sample-v2.pdf')
+      ]);
+      setOriginal(first);
+      setModified(second);
+    } catch {
+      onToast('Could not load the sample pair');
+    }
+  }, [onToast]);
+
+  const swap = () => {
+    setOriginal(modified);
+    setModified(original);
+  };
+
+  if (comparing && original && modified) {
+    return (
+      <div className="overlay compare-overlay" role="dialog" aria-label="Compare documents">
+        <div className="compare-result">
+          <div className="compare-result-bar">
+            <div className="compare-chips">
+              <span className="compare-chip">{original.name}</span>
+              <span className="compare-chip">{modified.name}</span>
+            </div>
+
+            <div className="compare-result-actions">
+              <ButtonComponent
+                cssClass="e-flat"
+                iconCss="e-icons e-swap-arrow"
+                content="Change documents"
+                onClick={() => setComparing(false)}
+              />
+              <span className="compare-toggle">
+                <SwitchComponent
+                  checked={syncScrolling}
+                  onChange={(args: ChangeEventArgs) => setSyncScrolling(args.checked === true)}
+                />
+                <span>Sync scrolling</span>
+              </span>
+              <ButtonComponent
+                cssClass="e-flat"
+                iconCss="e-icons e-close"
+                content="Close"
+                onClick={onClose}
+              />
+            </div>
+          </div>
+
+          <PdfComparerComponent
+            id="pdf-comparer"
+            originalDocumentPath={original.base64}
+            modifiedDocumentPath={modified.base64}
+            resourceUrl={viewerResourceUrl}
+            comparisonOptions={comparisonOptions}
+            enableDifferencePanel
+            enableSyncScrolling={syncScrolling}
+            height="100%"
+            width="100%"
+          >
+            <Inject services={[Magnification, Navigation, TextSelection]} />
+          </PdfComparerComponent>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <section className="compare" aria-label="Compare documents">
-      <header className="compare-head">
-        <div>
-          <h2>Compare documents</h2>
-          <p className="muted">
-            {running
-              ? 'Red marks text removed from the original; green marks text added in the modified version.'
-              : 'Choose the original and the modified version of the same document. Comparison runs on this device.'}
-          </p>
+    <div className="overlay compare-overlay" role="dialog" aria-label="Compare documents">
+      <div className="compare-setup">
+        <div className="compare-setup-head">
+          <div>
+            <h2 className="compare-heading">Compare documents</h2>
+            <p className="compare-sub">
+              Choose the original and the modified version of the same document. Comparison runs on
+              this device.
+            </p>
+          </div>
+          <ButtonComponent
+            cssClass="e-flat compare-close"
+            iconCss="e-icons e-close"
+            content="Close"
+            onClick={onClose}
+          />
         </div>
-        <button className="ib" title="Close" onClick={onClose}>
-          <Icon name="close" />
-        </button>
-      </header>
 
-      {!running ? (
-        <div className="compare-setup">
-          <div className="slots">
-            <Slot
-              kind="old"
-              title="Original"
-              hint="Drop the original PDF here"
-              file={original}
-              openDocument={openDocument}
-              onChange={setOriginal}
-            />
-            <button
-              className="ib swap"
-              title="Swap original and modified"
-              disabled={!original && !modified}
-              onClick={() => {
-                setOriginal(modified);
-                setModified(original);
-              }}
-            >
-              <Icon name="swap" />
-            </button>
-            <Slot
-              kind="new"
-              title="Modified"
-              hint="Drop the modified PDF here"
-              file={modified}
-              onChange={setModified}
-            />
-          </div>
-          <div className="row">
-            <button className="btn primary big" disabled={!ready} onClick={() => setRunning(true)}>
-              <Icon name="compare" />
-              Compare
-            </button>
-          </div>
-          <p className="muted center">
-            No files at hand?{' '}
-            <button
-              className="link"
-              onClick={async () => {
-                const [a, b] = await loadSamplePair();
-                setOriginal(a);
-                setModified(b);
-              }}
-            >
-              Use the sample pair
-            </button>
-          </p>
+        <div className="compare-slots">
+          <Slot
+            slot="original"
+            title="Original"
+            badge="Original"
+            file={original}
+            onFile={(file) => void handleFile('original', file)}
+            onRemove={() => setOriginal(null)}
+            extraAction={
+              openDocument ? (
+                <ButtonComponent
+                  cssClass="e-outline"
+                  iconCss="e-icons e-file-document"
+                  content="Use the open document"
+                  onClick={() => setOriginal(openDocument)}
+                />
+              ) : undefined
+            }
+          />
+
+          <ButtonComponent
+            cssClass="e-flat compare-swap"
+            iconCss="e-icons e-swap-arrow"
+            title="Swap documents"
+            disabled={!original && !modified}
+            onClick={swap}
+          />
+
+          <Slot
+            slot="modified"
+            title="Modified"
+            badge="Modified"
+            file={modified}
+            onFile={(file) => void handleFile('modified', file)}
+            onRemove={() => setModified(null)}
+          />
         </div>
-      ) : (
-        <>
-          <div className="compare-bar">
-            <span className="fchip">
-              <span className="tag old">Original</span>
-              <b>{original!.name}</b>
-            </span>
-            <span className="fchip">
-              <span className="tag new">Modified</span>
-              <b>{modified!.name}</b>
-            </span>
-            <button className="btn" onClick={() => setRunning(false)}>
-              Change documents
-            </button>
-            <span className="grow" />
-            <label className="toggle">
-              <input type="checkbox" checked={sync} onChange={(e) => setSync(e.target.checked)} /> Sync scrolling
-            </label>
-          </div>
-          <div className="compare-host">
-            <PdfComparerComponent
-              key={`${original!.name}|${modified!.name}|${original!.base64.length}|${modified!.base64.length}`}
-              id="pdf-comparer"
-              originalDocumentPath={original!.base64}
-              modifiedDocumentPath={modified!.base64}
-              resourceUrl={resourceUrl}
-              enableDifferencePanel={true}
-              enableSyncScrolling={sync}
-              comparisonOptions={options}
-              height="100%"
-              width="100%"
-            />
-          </div>
-        </>
-      )}
-    </section>
+
+        <ButtonComponent
+          cssClass="e-primary compare-go"
+          disabled={!original || !modified}
+          onClick={() => setComparing(true)}
+        >
+          Compare
+        </ButtonComponent>
+
+        <p className="compare-sample">
+          No files at hand?{' '}
+          <ButtonComponent
+            cssClass="e-link compare-sample-link"
+            content="Use the sample pair"
+            onClick={() => void useSamplePair()}
+          />
+        </p>
+      </div>
+    </div>
   );
 }
+
+export { baseName };
