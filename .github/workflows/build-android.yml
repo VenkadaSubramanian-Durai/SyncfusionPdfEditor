@@ -7,6 +7,9 @@ jobs:
   android-build:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -15,6 +18,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -25,36 +34,53 @@ jobs:
             i686-linux-android
             x86_64-linux-android
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK Components
+      - name: Accept Android Licenses
+        run: yes | sdkmanager --licenses
+
+      - name: Install Android Packages
         run: |
-          yes | sdkmanager --licenses
           sdkmanager \
             "platform-tools" \
             "platforms;android-34" \
             "build-tools;34.0.0" \
+            "cmdline-tools;latest" \
             "ndk;26.3.11579264"
+
+      - name: Verify Environment
+        run: |
+          node --version
+          npm --version
+          rustc --version
+          cargo --version
+          java -version
+          sdkmanager --list | head -50
 
       - name: Install Dependencies
         run: npm install
 
+      - name: Check Tauri Configuration
+        run: |
+          ls -la
+          ls -la src-tauri || true
+          cat src-tauri/tauri.conf.json || true
+
       - name: Initialize Android Project
         run: npx tauri android init
 
-      - name: Build APK
+      - name: Build Android APK
         run: npx tauri android build --apk
 
-      - name: Upload APK
+      - name: Find APKs
+        run: find . -name "*.apk"
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: |
+            src-tauri/gen/android/**/*.apk
             src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src-tauri/gen/android/app/build/outputs/**/*.apk
