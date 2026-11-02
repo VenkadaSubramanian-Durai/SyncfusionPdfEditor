@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
-import { getPlatform, inTauri } from './platform';
+import { inTauri, isMacOs } from './platform';
 
 /** A file handed over by the operating system. */
 export interface OpenedFile {
@@ -13,7 +13,6 @@ export interface OpenedFile {
 /** Capabilities reported by the native print plugin. */
 export interface NativeFeatures {
   print: boolean;
-  saveFile: boolean;
 }
 
 const NATIVE_PRINT_PLUGIN = 'native-print';
@@ -55,19 +54,20 @@ export function onOpenFile(handler: (file: OpenedFile) => void): () => void {
 }
 
 export async function getNativeFeatures(): Promise<NativeFeatures> {
-  if (!inTauri) {
-    return { print: false, saveFile: false };
+  // The native print plugin is only registered on macOS.
+  if (!inTauri || !isMacOs()) {
+    return { print: false };
   }
 
   try {
     return await call<NativeFeatures>('features');
   } catch {
-    return { print: false, saveFile: false };
+    return { print: false };
   }
 }
 
 export async function isNativePrintSupported(): Promise<boolean> {
-  if (!inTauri) {
+  if (!inTauri || !isMacOs()) {
     return false;
   }
 
@@ -85,17 +85,12 @@ export async function printPdf(name: string, data: string): Promise<boolean> {
 /**
  * Saves the given bytes through the platform's own save flow.
  *
- * iOS uses the plugin's "Save to Files" sheet. Every other platform shows the
- * Tauri save dialog and writes the file with the fs plugin.
+ * Every platform shows the Tauri save dialog (which uses the system file
+ * picker on mobile as well) and writes the file with the fs plugin.
  */
 export async function saveFile(name: string, base64: string): Promise<string | null> {
   if (!inTauri) {
     return null;
-  }
-
-  if (getPlatform() === 'ios') {
-    const saved = await call<boolean>('save_file', { name, data: base64 });
-    return saved ? name : null;
   }
 
   const path = await save({

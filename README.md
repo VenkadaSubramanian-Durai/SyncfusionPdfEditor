@@ -17,7 +17,7 @@ cross-platform-pdf-editor/
 │   ├── copy-viewer-assets.mjs       runs in npm install (postinstall)
 │   └── make-samples.py              regenerates public/sample*.pdf
 ├── src/                             React + Syncfusion Viewer UI
-└── src-tauri/                       Tauri shell and the native-print plugin
+└── src-tauri/                       Tauri shell and the macOS native-print plugin
 ```
 
 ## Prerequisites

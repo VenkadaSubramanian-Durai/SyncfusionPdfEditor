@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 src-tauri/target/
+src-tauri/plugins/native-print/target/
+src-tauri/plugins/native-print/Cargo.lock
 src-tauri/gen/schemas/
 
 # Generated mobile projects (see TODO-15 for the commit policy)

@@ -37,6 +37,20 @@ export function getPlatform(): AppPlatform {
   return currentPlatform;
 }
 
+/**
+ * True on macOS.
+ *
+ * Only macOS needs the native print panel, because WKWebView has no
+ * window.print. Every other platform prints through the WebView.
+ */
+export function isMacOs(): boolean {
+  if (!inTauri) {
+    return false;
+  }
+
+  return /mac/i.test(ua) || /mac/i.test(navigator.platform ?? '');
+}
+
 export function isPhone(): boolean {
   return typeof window !== 'undefined' && window.innerWidth <= 640;
 }

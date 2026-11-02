@@ -6,7 +6,6 @@
   "permissions": [
     "core:default",
     "dialog:allow-save",
-    "fs:allow-write-file",
-    "native-print:default"
+    "fs:allow-write-file"
   ]
 }

@@ -1,8 +1,5 @@
-const COMMANDS: &[&str] = &["features", "is_supported", "print_pdf", "save_file"];
+const COMMANDS: &[&str] = &["features", "is_supported", "print_pdf"];
 
 fn main() {
-    tauri_plugin::Builder::new(COMMANDS)
-        .android_path("android")
-        .ios_path("ios")
-        .build();
+    tauri_plugin::Builder::new(COMMANDS).build();
 }

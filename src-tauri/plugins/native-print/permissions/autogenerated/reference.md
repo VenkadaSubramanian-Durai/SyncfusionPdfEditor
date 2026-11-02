@@ -1,13 +1,12 @@
 ## Default Permission
 
-Allows the app to report platform features, print PDFs and save files.
+Allows the app to report platform features and print PDFs.
 
 #### This default permission set includes the following:
 
 - `allow-features`
 - `allow-is-supported`
 - `allow-print-pdf`
-- `allow-save-file`
 
 ## Permission Table
 
@@ -92,32 +91,6 @@ Enables the print_pdf command without any pre-configured scope.
 <td>
 
 Denies the print_pdf command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`native-print:allow-save-file`
-
-</td>
-<td>
-
-Enables the save_file command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`native-print:deny-save-file`
-
-</td>
-<td>
-
-Denies the save_file command without any pre-configured scope.
 
 </td>
 </tr>

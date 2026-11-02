@@ -1,8 +1,8 @@
-use tauri::{Runtime};
+use tauri::Runtime;
 
 mod commands;
 
-pub use commands::{features, is_supported, print_pdf, save_file};
+pub use commands::{features, is_supported, print_pdf};
 
 /// Entry point used by the Tauri builder.
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
@@ -10,8 +10,7 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             commands::features,
             commands::is_supported,
-            commands::print_pdf,
-            commands::save_file
+            commands::print_pdf
         ])
         .setup(|app, _api| {
             let _ = app;

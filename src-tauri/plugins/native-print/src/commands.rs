@@ -9,15 +9,11 @@ use tauri::{AppHandle, Manager, Runtime};
 #[cfg(target_os = "macos")]
 use super::macos;
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-use super::mobile;
-
 /// Capabilities of the current platform.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeFeatures {
     pub print: bool,
-    pub save_file: bool,
 }
 
 fn cache_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
@@ -52,14 +48,11 @@ fn write_temp_file<R: Runtime>(
 pub fn features<R: Runtime>(app: AppHandle<R>) -> NativeFeatures {
     let _ = &app;
 
-    let print = cfg!(any(
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "android"
-    ));
-    let save_file = cfg!(target_os = "ios");
+    // Only macOS needs the native print panel. Every other platform prints
+    // through the WebView of the shell.
+    let print = cfg!(target_os = "macos");
 
-    NativeFeatures { print, save_file }
+    NativeFeatures { print }
 }
 
 /// Kept for compatibility with older app versions.
@@ -83,38 +76,7 @@ pub fn print_pdf<R: Runtime>(
         return macos::print_pdf(&path).map_err(|error| error.to_string());
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    {
-        return mobile::print_pdf(&app, &path, &name).map_err(|error| error.to_string());
-    }
-
-    #[cfg(not(any(
-        target_os = "macos",
-        target_os = "android",
-        target_os = "ios"
-    )))]
-    {
-        let _ = path;
-        Ok(false)
-    }
-}
-
-/// Saves the payload through the platform's own file picker.
-#[tauri::command]
-pub fn save_file<R: Runtime>(
-    app: AppHandle<R>,
-    name: String,
-    data: String,
-) -> Result<bool, String> {
-    let path = write_temp_file(&app, "export", &name, &data)
-        .ok_or_else(|| "Could not prepare the file".to_string())?;
-
-    #[cfg(target_os = "ios")]
-    {
-        return mobile::export_file(&app, &path).map_err(|error| error.to_string());
-    }
-
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(target_os = "macos"))]
     {
         let _ = path;
         Ok(false)

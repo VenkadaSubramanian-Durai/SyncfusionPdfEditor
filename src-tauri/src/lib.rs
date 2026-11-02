@@ -55,10 +55,9 @@ fn startup_file_path() -> Option<PathBuf> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(native_print::init())
         .manage(StartupFile(Mutex::new(None)))
         .setup(|app| {
             // A file passed on the command line is opened at start-up.
@@ -72,7 +71,13 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![take_startup_file])
+        .invoke_handler(tauri::generate_handler![take_startup_file]);
+
+    // Only macOS needs the native print panel.
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(native_print::init());
+
+    builder
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
