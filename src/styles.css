@@ -329,7 +329,9 @@ body {
 }
 
 .rail-phone {
+  display: flex;
   flex-direction: row;
+  align-items: stretch;
   height: 58px;
   border-top: 1px solid var(--border);
   padding: 0 4px;

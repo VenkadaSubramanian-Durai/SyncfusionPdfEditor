@@ -35,11 +35,16 @@ const DESKTOP_ITEMS: RailEntry[] = [
   { id: 'pages', label: 'Pages', iconCss: 'e-icons e-thumbnail' }
 ];
 
+/*
+ * On mobile the viewer does not build the form designer toolbar and has no
+ * page thumbnail pane, so those items are left out. Redact is part of the
+ * bar directly because it works there.
+ */
 const PHONE_ITEMS: RailEntry[] = [
   { id: 'view', label: 'View', iconCss: 'e-icons e-home' },
   { id: 'annotate', label: 'Annotate', iconCss: 'e-icons e-annotation-edit' },
-  { id: 'sign', label: 'Sign', iconCss: 'e-icons e-signature' },
-  { id: 'pages', label: 'Pages', iconCss: 'e-icons e-thumbnail' },
+  { id: 'redact', label: 'Redact', iconCss: 'e-icons e-text-redact' },
+  { id: 'compare', label: 'Compare', iconCss: 'e-icons e-building-block' },
   { id: 'more', label: 'More', iconCss: 'e-icons e-more-vertical-1' }
 ];
 

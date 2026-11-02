@@ -515,7 +515,7 @@ export default function App() {
     }
   };
 
-  const onMoreAction = (action: 'redact' | 'compare' | 'thumbnails' | 'print') => {
+  const onMoreAction = (action: 'redact' | 'compare' | 'thumbnails' | 'organize') => {
     setMoreOpen(false);
 
     if (action === 'redact') {
@@ -528,7 +528,9 @@ export default function App() {
     } else if (action === 'thumbnails') {
       setThumbsOpen(toggleThumbnails(viewerRef.current));
     } else {
-      viewerRef.current?.print?.print();
+      setMode('view');
+      openOrganizer(viewerRef.current);
+      setOrganizing(true);
     }
   };
 
@@ -643,27 +645,9 @@ export default function App() {
           <div className="more-sheet" role="menu">
             <ButtonComponent
               cssClass="more-item"
-              iconCss="e-icons e-text-redact"
-              content="Redact"
-              onClick={() => onMoreAction('redact')}
-            />
-            <ButtonComponent
-              cssClass="more-item"
-              iconCss="e-icons e-building-block"
-              content="Compare"
-              onClick={() => onMoreAction('compare')}
-            />
-            <ButtonComponent
-              cssClass="more-item"
-              iconCss="e-icons e-thumbnail"
-              content="Thumbnails"
-              onClick={() => onMoreAction('thumbnails')}
-            />
-            <ButtonComponent
-              cssClass="more-item"
-              iconCss="e-icons e-print"
-              content="Print"
-              onClick={() => onMoreAction('print')}
+              iconCss="e-icons e-organize-pdf"
+              content="Organize"
+              onClick={() => onMoreAction('organize')}
             />
           </div>
         </>

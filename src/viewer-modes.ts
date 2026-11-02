@@ -91,12 +91,23 @@ export function closeFeatureToolbars(viewer: Viewer | null): void {
     return;
   }
 
-  viewer.toolbar.showAnnotationToolbar(false);
-  viewer.toolbar.showRedactionToolbar(false);
-
   const modules = viewer.toolbarModule;
 
+  /*
+   * On mobile the viewer builds the feature toolbars only when they are
+   * opened, so their element can be missing. The public toggle reads that
+   * element directly and would fail when it is absent.
+   */
   const annotation = modules?.annotationToolbarModule;
+  if (annotation?.toolbarElement) {
+    viewer.toolbar.showAnnotationToolbar(false);
+  }
+
+  const redaction = modules?.redactionToolbarModule;
+  if (redaction?.toolbarElement) {
+    viewer.toolbar.showRedactionToolbar(false);
+  }
+
   if (annotation && viewer.isAnnotationToolbarVisible) {
     // The toggle only hides the toolbar when its own flag allows it, so the
     // element is hidden directly here as well.
@@ -105,7 +116,6 @@ export function closeFeatureToolbars(viewer: Viewer | null): void {
     viewer.isAnnotationToolbarVisible = false;
   }
 
-  const redaction = modules?.redactionToolbarModule;
   if (redaction && viewer.isRedactionToolbarVisible) {
     redaction.toolbarElement.style.display = 'none';
     redaction.isToolbarHidden = false;
@@ -117,6 +127,34 @@ export function closeFeatureToolbars(viewer: Viewer | null): void {
     formDesigner.toolbarElement.style.display = 'none';
     formDesigner.isToolbarHidden = true;
     viewer.isFormDesignerToolbarVisible = false;
+  }
+
+  hideEmptyMobileToolbars(viewer);
+}
+
+/**
+ * On mobile the viewer destroys the content of a feature toolbar but leaves
+ * the empty container behind, which still takes up space above the document.
+ * Those containers are hidden here.
+ */
+function hideEmptyMobileToolbars(viewer: Viewer): void {
+  const element = (viewer as unknown as { element?: { id?: string } }).element;
+
+  if (!element?.id) {
+    return;
+  }
+
+  const ids = [
+    `${element.id}_mobileAnnotationToolbar`,
+    `${element.id}_mobileRedactionToolbar`
+  ];
+
+  for (const id of ids) {
+    const container = document.getElementById(id);
+
+    if (container && container.children.length === 0) {
+      container.style.display = 'none';
+    }
   }
 }
 
@@ -140,7 +178,9 @@ export function applyMode(viewer: Viewer | null, mode: EditMode): void {
       break;
     case 'sign': {
       const formDesigner = viewer.toolbarModule?.formDesignerToolbarModule;
-      if (formDesigner) {
+      // The form designer toolbar is not created on mobile, so there is
+      // nothing to open there.
+      if (formDesigner?.toolbarElement) {
         formDesigner.isToolbarHidden = true;
         formDesigner.showFormDesignerToolbar(null, false);
       }
