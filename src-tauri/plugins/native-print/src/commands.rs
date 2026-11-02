@@ -7,7 +7,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(target_os = "macos")]
-use super::macos;
+use crate::macos;
 
 /// Capabilities of the current platform.
 #[derive(Serialize)]
@@ -63,7 +63,7 @@ pub fn is_supported<R: Runtime>(app: AppHandle<R>) -> bool {
 
 /// Prints the PDF through the platform print screen.
 #[tauri::command]
-pub fn print_pdf<R: Runtime>(
+pub async fn print_pdf<R: Runtime>(
     app: AppHandle<R>,
     name: String,
     data: String,
@@ -73,7 +73,7 @@ pub fn print_pdf<R: Runtime>(
 
     #[cfg(target_os = "macos")]
     {
-        return macos::print_pdf(&path).map_err(|error| error.to_string());
+        return macos::print(&app, path, name).await;
     }
 
     #[cfg(not(target_os = "macos"))]

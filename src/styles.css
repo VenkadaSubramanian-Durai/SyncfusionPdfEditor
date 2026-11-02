@@ -106,8 +106,7 @@ body {
 .rail-item:focus-visible,
 .topbar-home:focus-visible,
 .compare-swap:focus-visible,
-.tile:focus-visible,
-.more-item:focus-visible {
+.tile:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -814,54 +813,6 @@ body {
 /* ==========================================================================
    Phone "More" sheet
    ========================================================================== */
-
-.more-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-overlay) - 1);
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.more-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: var(--z-overlay);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
-}
-
-.more-item {
-  display: flex !important;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 13px 10px !important;
-  border: none !important;
-  border-radius: var(--radius-sm);
-  background: none !important;
-  color: var(--text) !important;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  box-shadow: none !important;
-}
-
-.more-item:hover {
-  background: var(--bg-hover) !important;
-}
-
-.more-item .e-btn-icon {
-  color: var(--accent);
-  font-size: 16px;
-}
 
 /* ==========================================================================
    Toast

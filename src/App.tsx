@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ButtonComponent } from '@syncfusion/ej2-react-buttons';
 import {
   Annotation,
-  AnnotationDataFormat,
   BookmarkView,
   DownloadStartEventArgs,
   ExportFailureEventArgs,
@@ -61,8 +59,6 @@ const TOOLBAR_ITEMS: ToolbarItem[] = [
   'DownloadOption'
 ];
 
-const EXPORT_TIMEOUT_MS = 20000;
-
 function bytesToBase64(buffer: ArrayBuffer | Uint8Array): string {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   let binary = '';
@@ -71,42 +67,6 @@ function bytesToBase64(buffer: ArrayBuffer | Uint8Array): string {
     binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
   }
   return btoa(binary);
-}
-
-/**
- * The viewer resolves the exported annotations as raw bytes, while its type
- * declaration says string, so both shapes are accepted here.
- */
-function toBase64(data: unknown): string {
-  if (typeof data === 'string') {
-    return data;
-  }
-
-  if (data instanceof Uint8Array) {
-    return bytesToBase64(data);
-  }
-
-  if (data instanceof ArrayBuffer) {
-    return bytesToBase64(data);
-  }
-
-  return '';
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), ms);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      }
-    );
-  });
 }
 
 function baseName(name: string): string {
@@ -129,7 +89,6 @@ export default function App() {
   const [mode, setMode] = useState<EditMode>('view');
   const [thumbsOpen, setThumbsOpen] = useState(false);
   const [organizing, setOrganizing] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [saveState, setSaveState] = useState('Saved on this device');
   const [toast, setToast] = useState('');
   const [phone, setPhone] = useState(isPhone());
@@ -215,7 +174,6 @@ export default function App() {
     closeOverlays(viewerRef.current);
     setOrganizing(false);
     setMode('view');
-    setMoreOpen(false);
     setScreen('start');
   }, []);
 
@@ -347,12 +305,6 @@ export default function App() {
       args.cancel = true;
       showToast('Preparing annotations…');
 
-      const requested = args.exportData?.annotationDataFormat;
-      const isXfdf =
-        typeof requested === 'string' && requested.toLowerCase() === 'xfdf';
-      const format = isXfdf ? AnnotationDataFormat.Xfdf : AnnotationDataFormat.Json;
-      const fileName = `${baseName(doc?.name ?? 'document')}.${isXfdf ? 'xfdf' : 'json'}`;
-
       void (async () => {
         try {
           console.log('[export] 1/3');
@@ -362,33 +314,34 @@ export default function App() {
             throw new Error('the viewer returned no annotation data');
           }
 
-          const data = await withTimeout(
-            viewer.exportAnnotationsAsBase64String(format),
-            EXPORT_TIMEOUT_MS,
-            'the viewer returned no annotation data'
-          );
-          console.log('[export] 2/3');
+          const json = await viewer.exportAnnotationsAsObject();
 
-          const base64 = toBase64(data);
-          if (!base64) {
-            throw new Error('the viewer returned no annotation data');
+          if (!json) {
+            throw new Error('No annotations returned');
           }
 
-          showToast('Choose where to save the annotations');
-          const saved = await saveFile(fileName, base64);
-          console.log('[export] 3/3');
+          const base64 = bytesToBase64(
+            new TextEncoder().encode(String(json))
+          );
+
+          const saved = await saveFile(
+            `${baseName(doc?.name ?? 'document')}.json`,
+            base64
+          );
+
+          console.log('Saved:', saved);
 
           if (saved) {
-            showToast(`Annotations exported to ${saved}`);
+            showToast('Annotations exported');
           } else {
             showToast('Export cancelled');
           }
-        } catch (error) {
-          console.log(`[export] failed: ${reason(error)}`);
-          showToast(`Could not export annotations: ${reason(error)}`);
-        } finally {
-          exportingNatively.current = false;
-        }
+          } catch (error) {
+            console.log(`[export] failed: ${reason(error)}`);
+            showToast(`Could not export annotations: ${reason(error)}`);
+          } finally {
+            exportingNatively.current = false;
+          }
       })();
     },
     [doc, showToast]
@@ -424,15 +377,9 @@ export default function App() {
   const onRailSelect = useCallback((item: RailItem) => {
     const viewer = viewerRef.current;
 
-    if (item === 'more') {
-      setMoreOpen((open) => !open);
-      return;
-    }
-
     if (item === 'compare') {
       closeOverlays(viewer);
       setOrganizing(false);
-      setMoreOpen(false);
       setScreen('compare');
       return;
     }
@@ -512,25 +459,6 @@ export default function App() {
   const onTask = (task: StartTask) => {
     if (task === 'compare') {
       setScreen('compare');
-    }
-  };
-
-  const onMoreAction = (action: 'redact' | 'compare' | 'thumbnails' | 'organize') => {
-    setMoreOpen(false);
-
-    if (action === 'redact') {
-      setMode('redact');
-      applyMode(viewerRef.current, 'redact');
-    } else if (action === 'compare') {
-      closeOverlays(viewerRef.current);
-      setOrganizing(false);
-      setScreen('compare');
-    } else if (action === 'thumbnails') {
-      setThumbsOpen(toggleThumbnails(viewerRef.current));
-    } else {
-      setMode('view');
-      openOrganizer(viewerRef.current);
-      setOrganizing(true);
     }
   };
 
@@ -637,20 +565,6 @@ export default function App() {
           onClose={() => setScreen(doc ? 'editor' : 'start')}
           onToast={showToast}
         />
-      ) : null}
-
-      {phone && moreOpen ? (
-        <>
-          <div className="more-backdrop" onClick={() => setMoreOpen(false)} />
-          <div className="more-sheet" role="menu">
-            <ButtonComponent
-              cssClass="more-item"
-              iconCss="e-icons e-organize-pdf"
-              content="Organize"
-              onClick={() => onMoreAction('organize')}
-            />
-          </div>
-        </>
       ) : null}
 
       {toast ? (

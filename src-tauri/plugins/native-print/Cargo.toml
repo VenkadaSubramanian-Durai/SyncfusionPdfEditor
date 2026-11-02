@@ -23,4 +23,4 @@ base64 = "0.22"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSURL"] }
 objc2-app-kit = { version = "0.3", features = ["NSPrintInfo", "NSPrintOperation"] }
-objc2-pdf-kit = { version = "0.3", features = ["PDFDocument", "objc2-app-kit"] }
+objc2-pdf-kit = { version = "0.3", default-features = false, features = ["std", "PDFDocument", "objc2-app-kit"] }
