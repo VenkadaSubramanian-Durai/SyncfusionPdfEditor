@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ButtonComponent, SwitchComponent, type ChangeEventArgs } from '@syncfusion/ej2-react-buttons';
 import {
   Inject,
@@ -9,6 +9,11 @@ import {
   type TextComparisonOptions
 } from '@syncfusion/ej2-react-pdfviewer';
 import { sampleDocumentUrl, sampleDocumentUrlV2, viewerResourceUrl } from '../platform';
+
+/** The parts of the comparer that the app drives. */
+interface ComparerHandle {
+  enableSyncScrolling: boolean;
+}
 
 /** A document held in memory as base64. Used for every open document. */
 export interface DocFile {
@@ -154,6 +159,22 @@ export function CompareView({ openDocument, onClose, onToast }: CompareViewProps
   const [modified, setModified] = useState<DocFile | null>(null);
   const [comparing, setComparing] = useState(false);
   const [syncScrolling, setSyncScrolling] = useState(true);
+  const [loadingSample, setLoadingSample] = useState(false);
+  const comparerRef = useRef<PdfComparerComponent | null>(null);
+
+  /*
+   * The comparer reads this setting from its own property, so the value is
+   * written to the instance. The React property is only applied when it
+   * differs from the one the comparer already holds, which would leave the
+   * comparer on its first value after the second change.
+   */
+  useEffect(() => {
+    const comparer = comparerRef.current as unknown as ComparerHandle | null;
+
+    if (comparer && comparer.enableSyncScrolling !== syncScrolling) {
+      comparer.enableSyncScrolling = syncScrolling;
+    }
+  }, [syncScrolling]);
 
   // The comparer reads the options as plain properties, so a literal is used
   // here instead of the TextComparisonOptions class.
@@ -182,6 +203,7 @@ export function CompareView({ openDocument, onClose, onToast }: CompareViewProps
   );
 
   const useSamplePair = useCallback(async () => {
+    setLoadingSample(true);
     try {
       const [first, second] = await Promise.all([
         fetchToDocFile(sampleDocumentUrl, 'sample.pdf'),
@@ -191,6 +213,8 @@ export function CompareView({ openDocument, onClose, onToast }: CompareViewProps
       setModified(second);
     } catch {
       onToast('Could not load the sample pair');
+    } finally {
+      setLoadingSample(false);
     }
   }, [onToast]);
 
@@ -219,7 +243,14 @@ export function CompareView({ openDocument, onClose, onToast }: CompareViewProps
               <span className="compare-toggle">
                 <SwitchComponent
                   checked={syncScrolling}
-                  onChange={(args: ChangeEventArgs) => setSyncScrolling(args.checked === true)}
+                  onChange={(args: ChangeEventArgs & { target?: { checked?: boolean } }) => {
+                    /*
+                     * The React wrapper does not pass the switch state on the
+                     * change event. The switch instance holds the new state.
+                     */
+                    const target = args.target;
+                    setSyncScrolling(target?.checked === true);
+                  }}
                 />
                 <span>Sync scrolling</span>
               </span>
@@ -234,6 +265,7 @@ export function CompareView({ openDocument, onClose, onToast }: CompareViewProps
 
           <PdfComparerComponent
             id="pdf-comparer"
+            ref={comparerRef}
             originalDocumentPath={original.base64}
             modifiedDocumentPath={modified.base64}
             resourceUrl={viewerResourceUrl}
@@ -266,6 +298,23 @@ export function CompareView({ openDocument, onClose, onToast }: CompareViewProps
             iconCss="e-icons e-close"
             content="Close"
             onClick={onClose}
+          />
+        </div>
+
+        <div className="compare-sample-card">
+          <span className="compare-sample-icon e-icons e-file-document" aria-hidden="true" />
+          <div className="compare-sample-text">
+            <strong>Try it with the sample pair</strong>
+            <span>
+              Two versions of the same document are already bundled. They fill both slots so you
+              can see how the comparison works right away.
+            </span>
+          </div>
+          <ButtonComponent
+            cssClass="e-outline compare-sample-button"
+            content="Use the sample pair"
+            disabled={loadingSample}
+            onClick={() => void useSamplePair()}
           />
         </div>
 
@@ -314,15 +363,6 @@ export function CompareView({ openDocument, onClose, onToast }: CompareViewProps
         >
           Compare
         </ButtonComponent>
-
-        <p className="compare-sample">
-          No files at hand?{' '}
-          <ButtonComponent
-            cssClass="e-link compare-sample-link"
-            content="Use the sample pair"
-            onClick={() => void useSamplePair()}
-          />
-        </p>
       </div>
     </div>
   );

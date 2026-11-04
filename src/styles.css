@@ -704,23 +704,50 @@ body {
   margin: 26px auto 0;
 }
 
-.compare-sample {
-  margin: 20px 0 0;
-  text-align: center;
-  color: var(--text-muted);
+/*
+ * The sample pair sits above the upload slots, so it is the first thing the
+ * reader sees. The card gives it the weight of a real option instead of a
+ * small link at the bottom.
+ */
+.compare-sample-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.compare-sample-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 24px;
+}
+
+.compare-sample-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.compare-sample-text strong {
   font-size: 14px;
+  font-weight: 700;
 }
 
-.compare-sample-link {
-  padding: 0 !important;
-  background: none !important;
-  box-shadow: none !important;
-  color: var(--accent) !important;
-  text-decoration: underline;
+.compare-sample-text span {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
-.compare-sample-link:hover {
-  color: var(--accent-strong) !important;
+.compare-sample-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .compare-setup-head {
@@ -855,6 +882,16 @@ body {
 
   .compare-slots {
     grid-template-columns: 1fr;
+  }
+
+  .compare-sample-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .compare-sample-button {
+    width: 100%;
   }
 
   .compare-swap {

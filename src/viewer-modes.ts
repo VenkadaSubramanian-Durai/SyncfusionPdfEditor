@@ -1,4 +1,5 @@
 import type { PdfViewerComponent } from '@syncfusion/ej2-react-pdfviewer';
+import { currentPlatform, isPhone } from './platform';
 
 /** The feature toolbar that is currently open. Only one at a time. */
 export type EditMode = 'view' | 'annotate' | 'sign' | 'redact';
@@ -38,6 +39,8 @@ export interface ViewerHandle {
   isRedactionToolbarVisible: boolean;
   /** Tells the viewer to show or hide the organizer dialog. */
   isPageOrganizerOpen: boolean;
+  /** Tells the viewer to show or hide the comments (command) panel. */
+  isCommandPanelOpen: boolean;
   toolbar: {
     showAnnotationToolbar(visible: boolean): void;
     showRedactionToolbar(visible: boolean): void;
@@ -80,6 +83,39 @@ export function hideAppControlledToolbarItems(viewer: Viewer | null): void {
 /** Closes the comments panel. */
 export function closeCommentsPanel(viewer: Viewer | null): void {
   viewer?.viewerBase?.navigationPane?.closeCommentPanelContainer();
+}
+
+/**
+ * True when the comments panel should appear next to the editor.
+ *
+ * The panel is a side panel on web and desktop. Android and iOS use their
+ * own comments view, and a narrow window uses the phone layout, so the
+ * panel is left closed there.
+ */
+export function isCommentsPanelSupported(): boolean {
+  if (currentPlatform === 'android' || currentPlatform === 'ios') {
+    return false;
+  }
+
+  return !isPhone();
+}
+
+/**
+ * Reads whether the comments panel is on screen.
+ *
+ * The panel hides itself through its own ✕ button, so the element's
+ * visibility is the only place the real state is kept.
+ */
+export function isCommentsPanelOpen(viewer: Viewer | null): boolean {
+  const id = (viewer as unknown as { element?: { id?: string } })?.element?.id;
+
+  if (!id) {
+    return false;
+  }
+
+  const panel = document.getElementById(`${id}_commantPanel`);
+
+  return !!panel && panel.style.display !== 'none';
 }
 
 /** Closes the page organizer and the comments panel. */

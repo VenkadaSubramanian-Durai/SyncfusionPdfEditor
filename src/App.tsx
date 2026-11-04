@@ -31,6 +31,8 @@ import {
   closeOverlays,
   currentMode,
   hideAppControlledToolbarItems,
+  isCommentsPanelOpen,
+  isCommentsPanelSupported,
   openOrganizer,
   toggleThumbnails
 } from './viewer-modes';
@@ -92,6 +94,12 @@ export default function App() {
   const [saveState, setSaveState] = useState('Saved on this device');
   const [toast, setToast] = useState('');
   const [phone, setPhone] = useState(isPhone());
+  /*
+   * The comments panel sits next to the annotation toolbar on web and
+   * desktop. Mobile keeps its own comments view, so the panel stays closed
+   * there.
+   */
+  const [commentsPanelOpen, setCommentsPanelOpen] = useState(false);
 
   const viewerRef = useRef<PdfViewerComponent | null>(null);
   const pendingTask = useRef<StartTask | null>(null);
@@ -99,6 +107,7 @@ export default function App() {
   const toastTimer = useRef<number | undefined>(undefined);
   const nativePrint = useRef(false);
   const organizerWasOpen = useRef(false);
+  const commentsPanelWasOpen = useRef(false);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -113,6 +122,17 @@ export default function App() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  /*
+   * The comments panel is a side panel, so it is closed when the window
+   * becomes narrow enough for the phone layout.
+   */
+  useEffect(() => {
+    if (phone) {
+      commentsPanelWasOpen.current = false;
+      setCommentsPanelOpen(false);
+    }
+  }, [phone]);
 
   /* -------------------------------------------------------- native setup */
 
@@ -215,6 +235,7 @@ export default function App() {
       if (task && task !== 'compare') {
         const next = task as EditMode;
         setMode(next);
+        setCommentsPanelOpen(next === 'annotate' && isCommentsPanelSupported());
         applyMode(viewerRef.current, next);
       }
     },
@@ -420,6 +441,10 @@ export default function App() {
     // Any other tool replaces the organizer, so its highlight goes away.
     setOrganizing(false);
 
+    // The comments panel belongs to the annotation tool.
+    commentsPanelWasOpen.current = false;
+    setCommentsPanelOpen(item === 'annotate' && isCommentsPanelSupported());
+
     if (item === 'pages') {
       setMode('view');
       setThumbsOpen(toggleThumbnails(viewer));
@@ -470,6 +495,21 @@ export default function App() {
         setOrganizing(false);
       }
       organizerWasOpen.current = organizerOpen;
+
+      /*
+       * The comments panel has its own ✕ button inside the viewer. The flag
+       * is reset there so that the panel opens again the next time the
+       * annotation tool is picked. The check waits for the panel to have
+       * been open first, so that the request is not undone before the
+       * viewer has shown it.
+       */
+      const panelOpen = isCommentsPanelOpen(viewer);
+      if (panelOpen) {
+        commentsPanelWasOpen.current = true;
+      } else if (commentsPanelWasOpen.current) {
+        commentsPanelWasOpen.current = false;
+        setCommentsPanelOpen(false);
+      }
     }, 150);
 
     return () => window.clearInterval(timer);
@@ -531,6 +571,7 @@ export default function App() {
                 downloadFileName={doc.name}
                 exportAnnotationFileName={baseName(doc.name)}
                 toolbarSettings={{ toolbarItems: TOOLBAR_ITEMS }}
+                isCommandPanelOpen={commentsPanelOpen}
                 enablePageOrganizer
                 enableFormDesigner
                 enableNavigationToolbar={false}
