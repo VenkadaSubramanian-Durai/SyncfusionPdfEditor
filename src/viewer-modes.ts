@@ -25,10 +25,19 @@ interface RedactionToolbarModule {
   toolbarElement: HTMLElement;
 }
 
+/** The parts of the page organizer that the app reads. */
+interface PageOrganizerModule {
+  openPageOrganizer(): void;
+  closePageOrganizer(): void;
+  isOrganizeWindowOpen: boolean;
+}
+
 export interface ViewerHandle {
   isAnnotationToolbarVisible: boolean;
   isFormDesignerToolbarVisible: boolean;
   isRedactionToolbarVisible: boolean;
+  /** Tells the viewer to show or hide the organizer dialog. */
+  isPageOrganizerOpen: boolean;
   toolbar: {
     showAnnotationToolbar(visible: boolean): void;
     showRedactionToolbar(visible: boolean): void;
@@ -42,11 +51,7 @@ export interface ViewerHandle {
   annotationModule: {
     showCommentsPanel(): void;
   };
-  pageOrganizer: {
-    openPageOrganizer(): void;
-    closePageOrganizer(): void;
-    isOrganizeWindowOpen: boolean;
-  };
+  pageOrganizer: PageOrganizerModule;
   viewerBase: {
     navigationPane: {
       openThumbnailPane(): void;
@@ -72,17 +77,30 @@ export function hideAppControlledToolbarItems(viewer: Viewer | null): void {
   viewer?.toolbar.showToolbarItem(TOOLBAR_ITEMS_TO_HIDE, false);
 }
 
+/** Closes the comments panel. */
+export function closeCommentsPanel(viewer: Viewer | null): void {
+  viewer?.viewerBase?.navigationPane?.closeCommentPanelContainer();
+}
+
 /** Closes the page organizer and the comments panel. */
 export function closeOverlays(viewer: Viewer | null): void {
   if (!viewer) {
     return;
   }
 
+  /*
+   * The flag is cleared first. The viewer opens the organizer by itself when
+   * the last preview image arrives, so an open request that is still waiting
+   * for those images has to be cancelled here. Without it the organizer would
+   * appear later, after the user had already moved on to another tool.
+   */
+  viewer.isPageOrganizerOpen = false;
+
   if (viewer.pageOrganizer?.isOrganizeWindowOpen) {
     viewer.pageOrganizer.closePageOrganizer();
   }
 
-  viewer.viewerBase?.navigationPane?.closeCommentPanelContainer();
+  closeCommentsPanel(viewer);
 }
 
 /** Closes every feature toolbar. Used by the "View" rail item. */
@@ -191,17 +209,37 @@ export function applyMode(viewer: Viewer | null, mode: EditMode): void {
   }
 }
 
-/** Opens the page organizer dialog. */
+/**
+ * Opens the page organizer dialog.
+ *
+ * The organizer shows a preview image of every page, so the viewer can only
+ * open it once all of those images have arrived. When they are still on their
+ * way, the request is remembered by the viewer and the dialog appears as soon
+ * as the last image comes in.
+ */
 export function openOrganizer(viewer: Viewer | null): void {
-  viewer?.pageOrganizer.openPageOrganizer();
+  if (!viewer) {
+    return;
+  }
+
+  // The viewer opens the organizer by itself when the images arrive.
+  viewer.isPageOrganizerOpen = true;
+
+  // This covers the case where the images are already there.
+  viewer.pageOrganizer.openPageOrganizer();
 }
 
 export function closeOrganizer(viewer: Viewer | null): void {
-  if (viewer?.pageOrganizer?.isOrganizeWindowOpen) {
+  if (!viewer) {
+    return;
+  }
+
+  viewer.isPageOrganizerOpen = false;
+
+  if (viewer.pageOrganizer?.isOrganizeWindowOpen) {
     viewer.pageOrganizer.closePageOrganizer();
   }
 }
-
 /** Toggles the thumbnail pane and reports the state the viewer ended up in. */
 export function toggleThumbnails(viewer: Viewer | null): boolean {
   if (!viewer) {

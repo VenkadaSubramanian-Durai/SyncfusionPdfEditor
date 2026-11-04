@@ -632,10 +632,16 @@ body {
   color: var(--success);
 }
 
+/*
+ * The badge and the upload icon both sit on their own line. The icon is an
+ * inline element, so the badge is given its own block to keep the two from
+ * ending up side by side.
+ */
 .compare-upload {
-  display: inline-flex;
+  display: flex;
+  justify-content: center;
   color: var(--accent);
-  margin-bottom: 8px;
+  margin: 0 auto 10px;
   font-size: 26px;
   line-height: 1;
 }

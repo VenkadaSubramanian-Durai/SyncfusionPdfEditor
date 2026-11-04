@@ -98,6 +98,7 @@ export default function App() {
   const exportingNatively = useRef(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const nativePrint = useRef(false);
+  const organizerWasOpen = useRef(false);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -198,6 +199,18 @@ export default function App() {
 
       const task = pendingTask.current;
       pendingTask.current = null;
+
+      if (task === 'organize') {
+        /*
+         * The organizer needs a preview image of every page. Those images are
+         * requested while the document loads, so they are usually not ready
+         * yet. The viewer opens the organizer by itself once the last image
+         * arrives, which is why the request is set through the flag.
+         */
+        setOrganizing(true);
+        openOrganizer(viewerRef.current);
+        return;
+      }
 
       if (task && task !== 'compare') {
         const next = task as EditMode;
@@ -387,12 +400,25 @@ export default function App() {
     // N1: opening any rail item first closes the organizer.
     closeOverlays(viewer);
 
+    /*
+     * A pending "organize" task is replaced here. The landing-page tile sets
+     * it before the viewer has loaded the document, so the user can pick
+     * another tool while the file is still loading. The pending task would
+     * otherwise re-open the organizer once `documentLoad` fires.
+     */
+    if (pendingTask.current === 'organize' && item !== 'organize') {
+      pendingTask.current = null;
+    }
+
     if (item === 'organize') {
       setMode('view');
       openOrganizer(viewer);
       setOrganizing(true);
       return;
     }
+
+    // Any other tool replaces the organizer, so its highlight goes away.
+    setOrganizing(false);
 
     if (item === 'pages') {
       setMode('view');
@@ -432,6 +458,18 @@ export default function App() {
 
       const thumbs = viewer.viewerBase?.navigationPane?.isThumbnailOpen ?? false;
       setThumbsOpen((current) => (current === thumbs ? current : thumbs));
+
+      /*
+       * The organizer can also be closed with its own ✕ button. The flag is
+       * only cleared when the organizer was open and has closed since the
+       * last check. A request that is still waiting for the preview images
+       * keeps the highlight, because the organizer opens later on.
+       */
+      const organizerOpen = viewer.pageOrganizer?.isOrganizeWindowOpen ?? false;
+      if (organizerWasOpen.current && !organizerOpen) {
+        setOrganizing(false);
+      }
+      organizerWasOpen.current = organizerOpen;
     }, 150);
 
     return () => window.clearInterval(timer);
